@@ -20,7 +20,7 @@ REPO = Path(__file__).resolve().parents[3]
 W, H, SEAM, HINGE = 256, 384, 192, 101
 SCALE = 4                               # Of blocks.png, the art for the crop tests.
 ANIMATION_COLOUR = (255, 0, 0)
-HAS_ART = (REPO / "app" / "assets" / "classic-ds").is_dir()
+HAS_ART = (REPO / "app" / "assets" / "themes" / "classic").is_dir()
 NEEDS_ART = re.compile(r"/art/|art%3A")   # Requests that only 404 because the art is missing.
 
 # Waits for what start() in app.js draws, and for the shell and the first frame.
@@ -51,7 +51,7 @@ def _copy_app(root: Path):
     shutil.copytree(source / "assets" / "fonts", root / "app" / "assets" / "fonts")
     shutil.copytree(source / "assets" / "templates", root / "app" / "assets" / "templates")
     if HAS_ART:
-        shutil.copytree(source / "assets" / "classic-ds", root / "app" / "assets" / "classic-ds")
+        shutil.copytree(source / "assets" / "themes", root / "app" / "assets" / "themes")
     (root / "tools").mkdir()
     shutil.copy2(REPO / "tools" / "dsctl.py", root / "tools")
     host = root / "libs" / "dsupdate" / "host"

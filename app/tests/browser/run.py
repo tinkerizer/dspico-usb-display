@@ -102,7 +102,7 @@ def main() -> int:
         except harness.NoChrome as error:
             skip(f"Chrome wouldn't start: {error}")
         if not harness.HAS_ART:
-            print("No app/assets/classic-ds, so checks that need the art will skip.")
+            print("No app/assets/themes, so checks that need the art will skip.")
 
         loader = unittest.TestLoader()
         loader.testNamePatterns = [f"*{pattern}*" for pattern in args.patterns or []] or None

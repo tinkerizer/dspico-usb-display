@@ -91,7 +91,7 @@ class App:
         theme = self.themes.active
         themed = themes.apply_layout(self.layout, theme)
         elements = [e for e in themed["elements"] if e["type"] == "animation" and not e["hidden"]]
-        key = repr(elements)
+        key = repr((elements, layouts.ART_DIR))     # A GIF from art: comes from the theme's folder
         if key == self._animation_key:
             return
         self._animation_key = key

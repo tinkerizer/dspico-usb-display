@@ -3,6 +3,12 @@
 Each release's version is in [VERSION](VERSION). `tools/release --publish` uses the section for that
 version as the release notes.
 
+## Unreleased
+
+- **Theme folders:** each theme is a folder with its colours and all of its art and sounds, in
+  `app/assets/themes/` or, for your own, the app's data folder. Saved themes are converted on first
+  start, with a copy of Classic's art.
+
 ## 1.0.1
 
 - **Releases:** `tools/release --publish` works on a public repository too.

@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -14,11 +15,15 @@ SCHEMA = {
 }
 
 
-@lru_cache(maxsize=32)
 def box(style: str, width: int, height: int) -> Image.Image:
     """Stretches the menu's box to any size, leaving out its shaded panel."""
     from .. import layout as layouts
-    with Image.open(layouts.ART_DIR / "grf" / "iconbox.png") as image:
+    return _box(str(layouts.ART_DIR), style, width, height)
+
+
+@lru_cache(maxsize=32)
+def _box(folder: str, style: str, width: int, height: int) -> Image.Image:
+    with Image.open(Path(folder) / "grf" / "iconbox.png") as image:
         frame = np.asarray(image.convert("RGB").crop(BOXES[style]))[:, PANEL:]
     frame = np.concatenate([frame[:, :-EDGE - 1:-1], frame], axis=1)   # Mirror the right edge.
 

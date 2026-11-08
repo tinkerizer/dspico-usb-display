@@ -14,7 +14,8 @@ from . import elements
 FROZEN = getattr(sys, "frozen", False)
 ROOT = Path(sys._MEIPASS) if FROZEN else Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
-ART_DIR = ASSETS / "classic-ds"
+THEMES_DIR = ASSETS / "themes"
+ART_DIR = THEMES_DIR / "classic"    # The active theme's folder. themes.ThemeStore changes it.
 SEED_DIR = ASSETS / "local"
 APP_DATA = Path(os.environ.get("LOCALAPPDATA", ".")) / "DSDisplay"
 LOCAL_DIR = APP_DATA / "data" if FROZEN else SEED_DIR

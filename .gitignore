@@ -17,3 +17,4 @@ tools/shell-lab/refs/
 tools/shell-lab/*.ttf
 release/
 *:Zone.Identifier
+app/assets/local/

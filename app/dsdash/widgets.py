@@ -3,6 +3,7 @@ import math
 import platform
 import re
 from datetime import datetime
+from pathlib import Path
 from functools import lru_cache
 
 import numpy as np
@@ -32,9 +33,13 @@ def _remove_key_color(image: Image.Image) -> Image.Image:
     return image
 
 
-@lru_cache(maxsize=64)
 def load_art(reference: str) -> Image.Image:
-    path = layouts.resolve_file(reference)
+    return _load_image(str(layouts.resolve_file(reference)))
+
+
+@lru_cache(maxsize=64)
+def _load_image(name: str) -> Image.Image:
+    path = Path(name)
     with Image.open(path) as image:
         if path.suffix.lower() == ".gif":
             image = next(ImageSequence.Iterator(image)).copy()
@@ -46,10 +51,14 @@ def button_frame(style: str) -> Image.Image:
     return load_art("art:grf/box.bmp").crop(BUTTON_FRAMES[style])
 
 
-@lru_cache(maxsize=1)
 def menu_art() -> Image.Image:
     """The top menu art, with the sprite over the clock's corner cleaned up."""
-    with Image.open(layouts.ART_DIR / "background" / "top.png") as image:
+    return _menu_art(str(layouts.ART_DIR))
+
+
+@lru_cache(maxsize=4)
+def _menu_art(folder: str) -> Image.Image:
+    with Image.open(Path(folder) / "background" / "top.png") as image:
         top = image.convert("RGB")
     corner = top.crop((15, 30, 32, 42)).transpose(Image.FLIP_LEFT_RIGHT)
     top.paste(corner, (95, 30))

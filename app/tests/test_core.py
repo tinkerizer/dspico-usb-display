@@ -356,8 +356,14 @@ class ThemeTests(unittest.TestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.path = Path(folder.name) / "themes.json"
-        self.store = themes.ThemeStore(self.path)
+        self.user_dir = Path(folder.name) / "themes"
+        art = layout.ART_DIR
+        self.addCleanup(setattr, layout, "ART_DIR", art)
+        self.store = self.reopen()
         self.own = {"paper": "#102030", "ink": "#ffffff", "boost": 10, "lift": 0, "bar": 3}
+
+    def reopen(self):
+        return themes.ThemeStore(self.path, self.user_dir)
 
     def test_classic_leaves_the_frame_alone(self):
         frame = Image.new("RGB", (4, 4), "#808080")
@@ -388,9 +394,37 @@ class ThemeTests(unittest.TestCase):
 
     def test_saved_themes_survive_a_restart(self):
         self.store.save("Mine", self.own)
-        again = themes.ThemeStore(self.path)
+        again = self.reopen()
         self.assertEqual(again.active_name, "Mine")
         self.assertEqual(again.active, self.own)
+
+    def test_each_theme_is_a_folder_with_all_its_art(self):
+        for name, folder in self.store.built_in.items():
+            with self.subTest(name):
+                self.assertTrue((folder / "topbar" / "11.png").is_file())
+                self.assertTrue((folder / "sound" / "select.wav").is_file())
+        self.store.save("Mine", self.own)
+        folder = self.store.custom["Mine"]
+        self.assertEqual(folder, self.user_dir / "mine")
+        self.assertTrue((folder / "topbar" / "11.png").is_file())
+        self.assertEqual(json.loads((folder / "theme.json").read_text())["name"], "Mine")
+
+    def test_art_comes_from_the_active_theme(self):
+        self.store.save("Mine", self.own)
+        self.assertEqual(layout.resolve_file("art:grf/box.bmp"), (self.user_dir / "mine" / "grf" / "box.bmp").resolve())
+        self.store.use("Dark")
+        self.assertEqual(layout.resolve_file("art:grf/box.bmp").parent.parent, self.store.built_in["Dark"].resolve())
+        self.store.delete("Mine")
+        self.assertFalse((self.user_dir / "mine").exists())
+
+    def test_old_saved_themes_become_folders(self):
+        self.path.write_text(json.dumps({"active": "Old", "themes": {"Old": self.own}}), encoding="utf-8")
+        store = self.reopen()
+        self.assertEqual(store.active_name, "Old")
+        self.assertEqual(store.active, self.own)
+        self.assertTrue((store.custom["Old"] / "grf" / "box.bmp").is_file())
+        store.use("Old")
+        self.assertEqual(json.loads(self.path.read_text()), {"active": "Old"})
 
     def test_built_in_themes_are_protected(self):
         with self.assertRaises(ValueError):
@@ -410,7 +444,7 @@ class ThemeTests(unittest.TestCase):
 
     def test_a_broken_file_is_ignored(self):
         self.path.write_text("not json", encoding="utf-8")
-        self.assertEqual(themes.ThemeStore(self.path).active_name, "Classic")
+        self.assertEqual(self.reopen().active_name, "Classic")
 
 
 class FakeNvml:
