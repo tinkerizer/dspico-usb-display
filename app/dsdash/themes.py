@@ -1,6 +1,7 @@
-"""DS dashboard themes. Each is a folder with theme.json, its colours, and all of its art. See docs/THEMES.md."""
+"""DS dashboard themes. Each is a folder: theme.json, with its colours and layout, and all of its art. See docs/THEMES.md."""
 import json
 import logging
+import os
 import re
 import shutil
 from copy import deepcopy
@@ -15,8 +16,6 @@ from . import templates
 
 log = logging.getLogger(__name__)
 
-STATE_PATH = layouts.LOCAL_DIR / "themes.json"     # Which theme is active
-USER_DIR = layouts.LOCAL_DIR / "themes"
 MAX_NAME = 24
 NEUTRAL = 24    # Pixels whose channels differ by less than this count as grey.
 DEFAULT = "Classic"
@@ -95,20 +94,31 @@ def load_folders(parent: Path) -> Dict[str, Path]:
     found = {}
     for folder in sorted(parent.iterdir()) if parent.is_dir() else []:
         try:
-            info = json.loads((folder / "theme.json").read_text(encoding="utf-8"))
-            found[clean_name(info.get("name"))] = folder
+            found[clean_name(read_file(folder).get("name"))] = folder
         except (OSError, ValueError, AttributeError) as error:
             log.warning("Theme %s skipped: %s", folder.name, error)
     return found
 
 
+def read_file(folder: Path) -> dict:
+    return json.loads((folder / "theme.json").read_text(encoding="utf-8"))
+
+
 def read(folder: Path) -> dict:
-    return clean(json.loads((folder / "theme.json").read_text(encoding="utf-8")))
+    """A theme's colours."""
+    return clean(read_file(folder))
 
 
-def write(folder: Path, name: str, theme: dict):
+def read_layout(folder: Path) -> dict:
+    return layouts.from_saved(read_file(folder).get("layout"))
+
+
+def write(folder: Path, name: str, theme: dict, layout: dict):
+    """Writes through a temporary file, so a crash can't leave half a theme."""
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / "theme.json").write_text(json.dumps({"name": name, **clean(theme)}, indent=2), encoding="utf-8")
+    temporary = folder / "theme.json.tmp"
+    temporary.write_text(json.dumps({"name": name, **clean(theme), "layout": layout}, indent=2), encoding="utf-8")
+    os.replace(temporary, folder / "theme.json")
 
 
 def folder_name(name: str, taken) -> str:
@@ -120,15 +130,17 @@ def folder_name(name: str, taken) -> str:
 
 
 class ThemeStore:
-    """The themes, which one is active, and its art folder. `preview` overrides its colours while editing.
+    """The themes, which one is active, and its folder. `preview` overrides its colours while editing.
 
-    Built-in themes are in assets/themes and saved ones in the data folder's themes, each a whole
-    folder. Saving copies the active theme's art, so every theme has all of its own.
+    Built-in themes are in assets/themes and the user's in the data folder's themes, each a whole
+    folder. Changing a built-in one writes a copy to the data folder, which then replaces it, and
+    deleting that copy brings the original back. Saving under a new name copies the whole theme.
     """
 
-    def __init__(self, state_path=None, user_dir=None, built_in_dir=None):
-        self.state_path = state_path or STATE_PATH
-        self.user_dir = user_dir or USER_DIR
+    def __init__(self, data_dir=None, built_in_dir=None):
+        data_dir = data_dir or layouts.LOCAL_DIR
+        self.state_path = data_dir / "themes.json"
+        self.user_dir = data_dir / "themes"
         self.built_in = load_folders(built_in_dir or layouts.THEMES_DIR)
         self.preview = None
         state = {}
@@ -137,11 +149,17 @@ class ThemeStore:
         except (OSError, ValueError):
             pass
         self._convert_old(state.get("themes"))
-        self.custom = {name: folder for name, folder in load_folders(self.user_dir).items() if name not in self.built_in}
+        self._load_user()
         self.active_name = state.get("active") if state.get("active") in self.folders() else DEFAULT
         self._point_art()
+        self._move_old_layout(data_dir)
         if "themes" in state:
             self._write_state()
+
+    def _load_user(self):
+        user = load_folders(self.user_dir)
+        self.custom = {name: folder for name, folder in user.items() if name not in self.built_in}
+        self.edited = {name: folder for name, folder in user.items() if name in self.built_in}
 
     def _convert_old(self, saved):
         """Saved themes used to be colours only, in themes.json. Each becomes a folder with Classic's art."""
@@ -154,15 +172,47 @@ class ThemeStore:
                 continue
             if name in self.built_in or name in load_folders(self.user_dir):
                 continue
+            source = self.built_in[DEFAULT]
             folder = self.user_dir / folder_name(name, self._taken())
-            shutil.copytree(self.built_in[DEFAULT], folder, ignore=shutil.ignore_patterns("theme.json"))
-            write(folder, name, theme)
+            shutil.copytree(source, folder, ignore=shutil.ignore_patterns("theme.json"))
+            write(folder, name, theme, read_file(source).get("layout"))
+
+    def _move_old_layout(self, data_dir: Path):
+        """The layout and uploads used to be shared by every theme. They go to the active theme and the user's own."""
+        old = data_dir / "layout.json"
+        if not old.exists():
+            return
+        try:
+            layout = layouts.from_saved(json.loads(old.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return
+        uploads = [path for path in data_dir.iterdir() if path.is_file() and path.suffix.lower() in layouts.IMAGE_SUFFIXES]
+        folders = set(self.custom.values()) | {self._writable(self.active_name)}
+        for folder in folders:
+            (folder / "uploads").mkdir(parents=True, exist_ok=True)
+            for path in uploads:
+                shutil.copy2(path, folder / "uploads" / path.name)
+            info = read_file(folder)
+            write(folder, info["name"], info, layout)
+        os.replace(old, old.with_name("layout.json.old"))
 
     def _taken(self):
         return {path.name for path in self.user_dir.iterdir()} if self.user_dir.is_dir() else set()
 
+    def _writable(self, name: str) -> Path:
+        """The folder to change for a theme, copying a built-in one first."""
+        folders = self.folders()
+        if name in self.built_in and name not in self.edited:
+            folder = self.user_dir / self.built_in[name].name
+            shutil.copytree(self.built_in[name], folder, dirs_exist_ok=True)
+            self.edited[name] = folder
+            if name == self.active_name:
+                self._point_art()
+            return folder
+        return folders[name]
+
     def folders(self) -> Dict[str, Path]:
-        return {**self.built_in, **self.custom}
+        return {**self.built_in, **self.edited, **self.custom}
 
     def all(self) -> Dict[str, dict]:
         return {name: read(folder) for name, folder in self.folders().items()}
@@ -175,9 +225,20 @@ class ThemeStore:
     def active(self) -> dict:
         return self.preview or read(self.folder)
 
+    @property
+    def layout(self) -> dict:
+        return read_layout(self.folder)
+
+    def save_layout(self, layout: dict):
+        folder = self._writable(self.active_name)
+        write(folder, self.active_name, read(folder), layout)
+
+    def uploads_dir(self) -> Path:
+        return self._writable(self.active_name) / "uploads"
+
     def listing(self) -> dict:
         return {"active": self.active_name, "themes": self.all(), "builtIn": list(self.built_in),
-                "colours": [profile_colour(i) for i in range(16)]}
+                "edited": list(self.edited), "colours": [profile_colour(i) for i in range(16)]}
 
     def _point_art(self):
         layouts.ART_DIR = self.folder
@@ -194,24 +255,27 @@ class ThemeStore:
         self._write_state()
 
     def save(self, name, theme: dict):
-        """Saves the colours under a name. A new theme starts with a copy of the active theme's art."""
+        """Saves the colours under a name. A new name copies the active theme: its art, uploads and layout."""
         name, theme = clean_name(name), clean(theme)
-        if name in self.built_in:
-            raise ValueError(f"{name} is built in, so save under a new name")
-        folder = self.custom.get(name)
-        if folder is None:
+        if name in self.folders():
+            folder = self._writable(name)
+        else:
             folder = self.user_dir / folder_name(name, self._taken())
-            shutil.copytree(self.folder, folder, ignore=shutil.ignore_patterns("theme.json"))
+            shutil.copytree(self.folder, folder)
             self.custom[name] = folder
-        write(folder, name, theme)
+        write(folder, name, theme, read_file(folder).get("layout"))
         self.use(name)
 
     def delete(self, name: str):
-        if name not in self.custom:
-            raise ValueError("Only saved themes can be deleted")
-        shutil.rmtree(self.custom.pop(name), ignore_errors=True)
-        if self.active_name == name:
-            self.active_name = DEFAULT
+        """Deletes a theme of the user's own, or puts a changed built-in one back as it was."""
+        if name in self.custom:
+            shutil.rmtree(self.custom.pop(name), ignore_errors=True)
+            if self.active_name == name:
+                self.active_name = DEFAULT
+        elif name in self.edited:
+            shutil.rmtree(self.edited.pop(name), ignore_errors=True)
+        else:
+            raise ValueError("Built-in themes can't be deleted")
         self.preview = None
         self._point_art()
         self._write_state()

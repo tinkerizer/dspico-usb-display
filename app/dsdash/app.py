@@ -28,7 +28,7 @@ class App:
         self.firmware = FirmwareKeeper()
         self.themes = themes.ThemeStore()
         self.sensors = Sensors()
-        self.layout = layouts.load()
+        self.layout = self.themes.layout
         # Starts from the clock so it keeps rising when the app restarts, which
         # stops a tab left open from matching a revision it never saw.
         self.revision = time.time_ns() // 1_000_000
@@ -57,7 +57,7 @@ class App:
         with self._lock:
             if revision is not None and revision != self.revision:
                 raise LayoutConflict("Another tab changed the layout")
-            layouts.save(clean)
+            self.themes.save_layout(clean)
             self.layout = clean
             self.revision += 1
             saved = self.revision
@@ -79,6 +79,10 @@ class App:
                 self.themes.delete(name)
             else:
                 raise ValueError("Unknown theme action")
+            if action != "preview":
+                # Each theme has its own layout, so the editor reloads it.
+                self.layout = self.themes.layout
+                self.revision += 1
             self._load_animations()
         self._render_now.set()
         return self.themes.listing()
@@ -115,9 +119,11 @@ class App:
         safe_name = layouts.safe_upload_name(name)
         with Image.open(BytesIO(data)) as image:
             image.verify()
-        layouts.LOCAL_DIR.mkdir(parents=True, exist_ok=True)
-        (layouts.LOCAL_DIR / safe_name).write_bytes(data)
-        return f"local:{safe_name}"
+        with self._lock:
+            folder = self.themes.uploads_dir()
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / safe_name).write_bytes(data)
+        return f"art:uploads/{safe_name}"
 
     def set_brightness(self, level: int):
         self.brightness = max(0, min(100, level))

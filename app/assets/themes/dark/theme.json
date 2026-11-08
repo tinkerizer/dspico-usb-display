@@ -4,5 +4,471 @@
   "ink": "#f4f4f6",
   "boost": 35,
   "lift": 35,
-  "bar": 11
+  "bar": 11,
+  "layout": {
+    "version": 1,
+    "elements": [
+      {
+        "id": "top_paper",
+        "type": "image",
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 192,
+        "hidden": false,
+        "locked": true,
+        "props": {
+          "file": "art:quickmenu/topbg.png",
+          "crop_x": 0,
+          "crop_y": 0,
+          "crop_w": 0,
+          "crop_h": 0,
+          "lock_aspect": "yes",
+          "pixel_lock": "no"
+        }
+      },
+      {
+        "id": "top_bar",
+        "type": "top_bar",
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 16,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "colour": "theme",
+          "name": "{host}",
+          "text_colour": "#ffffff",
+          "show_time": "yes",
+          "show_date": "yes",
+          "show_usb": "yes",
+          "show_battery": "yes"
+        }
+      },
+      {
+        "id": "clock",
+        "type": "clock",
+        "x": 15,
+        "y": 31,
+        "w": 97,
+        "h": 97,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "face": "yes",
+          "hand_color": "#424242",
+          "second_color": "#005af6"
+        }
+      },
+      {
+        "id": "calendar",
+        "type": "calendar",
+        "x": 127,
+        "y": 31,
+        "w": 113,
+        "h": 97,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "today_color": "#005af6",
+          "text_color": "#424242"
+        }
+      },
+      {
+        "id": "weekday",
+        "type": "text",
+        "x": 88,
+        "y": 18,
+        "w": 80,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "{weekday}",
+          "size": "10",
+          "color": "#424242",
+          "align": "center"
+        }
+      },
+      {
+        "id": "digital_time",
+        "type": "text",
+        "x": 23,
+        "y": 146,
+        "w": 80,
+        "h": 24,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "{time}",
+          "size": "20",
+          "color": "#424242",
+          "align": "center"
+        }
+      },
+      {
+        "id": "month",
+        "type": "text",
+        "x": 133,
+        "y": 152,
+        "w": 100,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "{month} {year}",
+          "size": "10",
+          "color": "#424242",
+          "align": "center"
+        }
+      },
+      {
+        "id": "bottom_paper",
+        "type": "image",
+        "x": 0,
+        "y": 192,
+        "w": 256,
+        "h": 192,
+        "hidden": false,
+        "locked": true,
+        "props": {
+          "file": "art:quickmenu/bottombg.png",
+          "crop_x": 0,
+          "crop_y": 0,
+          "crop_w": 0,
+          "crop_h": 0,
+          "lock_aspect": "yes",
+          "pixel_lock": "no"
+        }
+      },
+      {
+        "id": "corner_brightness",
+        "type": "image",
+        "x": 10,
+        "y": 367,
+        "w": 16,
+        "h": 16,
+        "hidden": false,
+        "locked": true,
+        "props": {
+          "file": "art:grf/cornericons.png",
+          "crop_x": 0,
+          "crop_y": 0,
+          "crop_w": 16,
+          "crop_h": 16,
+          "lock_aspect": "yes",
+          "pixel_lock": "no"
+        }
+      },
+      {
+        "id": "corner_settings",
+        "type": "image",
+        "x": 117,
+        "y": 362,
+        "w": 32,
+        "h": 22,
+        "hidden": false,
+        "locked": true,
+        "props": {
+          "file": "art:grf/menu_settings.png",
+          "crop_x": 0,
+          "crop_y": 0,
+          "crop_w": 32,
+          "crop_h": 22,
+          "lock_aspect": "yes",
+          "pixel_lock": "no"
+        }
+      },
+      {
+        "id": "corner_manual",
+        "type": "image",
+        "x": 235,
+        "y": 367,
+        "w": 16,
+        "h": 16,
+        "hidden": false,
+        "locked": true,
+        "props": {
+          "file": "art:grf/cornericons.png",
+          "crop_x": 0,
+          "crop_y": 96,
+          "crop_w": 16,
+          "crop_h": 16,
+          "lock_aspect": "yes",
+          "pixel_lock": "no"
+        }
+      },
+      {
+        "id": "card",
+        "type": "button",
+        "x": 33,
+        "y": 217,
+        "w": 190,
+        "h": 45,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "style": "raised"
+        }
+      },
+      {
+        "id": "cloud",
+        "type": "animation",
+        "x": 36,
+        "y": 221,
+        "w": 40,
+        "h": 36,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "file": "art:uploads/cloud.gif",
+          "crop_x": 0,
+          "crop_y": 0,
+          "crop_w": 0,
+          "crop_h": 0,
+          "lock_aspect": "yes",
+          "pixel_lock": "no"
+        }
+      },
+      {
+        "id": "card_gpu",
+        "type": "text",
+        "x": 83,
+        "y": 222,
+        "w": 62,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "GPU  {gpu}",
+          "size": "10",
+          "color": "#424242",
+          "align": "left"
+        }
+      },
+      {
+        "id": "card_temp",
+        "type": "temperature",
+        "x": 83,
+        "y": 234,
+        "w": 62,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "TEMP ",
+          "size": "10",
+          "color": "#424242"
+        }
+      },
+      {
+        "id": "card_net",
+        "type": "text",
+        "x": 83,
+        "y": 246,
+        "w": 62,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "NET  {net_down}",
+          "size": "10",
+          "color": "#0041c3",
+          "align": "left"
+        }
+      },
+      {
+        "id": "gpu_graph",
+        "type": "graph",
+        "x": 147,
+        "y": 222,
+        "w": 72,
+        "h": 36,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "metric": "gpu",
+          "color": "#b3202a"
+        }
+      },
+      {
+        "id": "cpu_button",
+        "type": "button",
+        "x": 33,
+        "y": 265,
+        "w": 93,
+        "h": 45,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "style": "raised"
+        }
+      },
+      {
+        "id": "cpu_label",
+        "type": "text",
+        "x": 39,
+        "y": 267,
+        "w": 40,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "CPU",
+          "size": "10",
+          "color": "#424242",
+          "align": "left"
+        }
+      },
+      {
+        "id": "cpu_value",
+        "type": "text",
+        "x": 78,
+        "y": 267,
+        "w": 44,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "{cpu}",
+          "size": "10",
+          "color": "#0041c3",
+          "align": "right"
+        }
+      },
+      {
+        "id": "cpu_graph",
+        "type": "graph",
+        "x": 38,
+        "y": 281,
+        "w": 84,
+        "h": 26,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "metric": "cpu",
+          "color": "#0041c3"
+        }
+      },
+      {
+        "id": "ram_button",
+        "type": "button",
+        "x": 129,
+        "y": 265,
+        "w": 93,
+        "h": 45,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "style": "raised"
+        }
+      },
+      {
+        "id": "ram_label",
+        "type": "text",
+        "x": 135,
+        "y": 267,
+        "w": 40,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "RAM",
+          "size": "10",
+          "color": "#424242",
+          "align": "left"
+        }
+      },
+      {
+        "id": "ram_value",
+        "type": "text",
+        "x": 174,
+        "y": 267,
+        "w": 44,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "{ram}",
+          "size": "10",
+          "color": "#28aa3c",
+          "align": "right"
+        }
+      },
+      {
+        "id": "ram_graph",
+        "type": "graph",
+        "x": 134,
+        "y": 281,
+        "w": 84,
+        "h": 26,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "metric": "ram",
+          "color": "#28aa3c"
+        }
+      },
+      {
+        "id": "disk_button",
+        "type": "button",
+        "x": 33,
+        "y": 313,
+        "w": 190,
+        "h": 45,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "style": "raised"
+        }
+      },
+      {
+        "id": "disk_label",
+        "type": "text",
+        "x": 39,
+        "y": 315,
+        "w": 40,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "DISK",
+          "size": "10",
+          "color": "#424242",
+          "align": "left"
+        }
+      },
+      {
+        "id": "disk_bar",
+        "type": "bar",
+        "x": 41,
+        "y": 336,
+        "w": 174,
+        "h": 10,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "metric": "disk",
+          "color": "#d30000"
+        }
+      },
+      {
+        "id": "disk_value",
+        "type": "text",
+        "x": 180,
+        "y": 315,
+        "w": 40,
+        "h": 12,
+        "hidden": false,
+        "locked": false,
+        "props": {
+          "text": "{disk_free}",
+          "size": "10",
+          "color": "#424242",
+          "align": "right"
+        }
+      }
+    ]
+  }
 }

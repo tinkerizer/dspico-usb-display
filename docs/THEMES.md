@@ -4,25 +4,28 @@ There are three ways to change how the DS looks, from simplest to most work.
 
 | Change | How | Where |
 |---|---|---|
-| Colours and art | A theme: a folder with its colours and all its images and sounds | The **DS theme** button, or `themes/` folders |
+| Everything on the DS | A theme: a folder with its layout, colours, images and sounds | The editor, or `themes/` folders |
 | An element made of other elements | A template: a JSON file | `templates/` folder |
 | A new kind of drawing, such as a new graph | An element type: one Python file | `app/dsdash/elements/` |
 
 ## Themes
 
-Each theme is one folder holding everything it uses, so a theme can be copied or shared as a
-folder. Themes don't share files: the same image in two themes is two copies.
+A theme is the whole dashboard: its layout, colours, images, GIFs and sounds, in one folder. Two
+themes can look nothing alike, and a theme can be copied or shared as a folder. Themes don't share
+files: the same image in two themes is two copies.
 
 ```
 classic/
-  theme.json        name and colours
+  theme.json        name, colours and layout
+  uploads/          images and GIFs added in the editor
   background/       menu backgrounds
   battery/  grf/  quickmenu/  topbar/  ui/  volume/
   sound/            the editor's sounds
 ```
 
 ```json
-{"name": "Classic", "paper": "#ffffff", "ink": "#000000", "boost": 0, "lift": 0, "bar": 11}
+{"name": "Classic", "paper": "#ffffff", "ink": "#000000", "boost": 0, "lift": 0, "bar": 11,
+ "layout": {"version": 1, "elements": [...]}}
 ```
 
 | Field | Meaning |
@@ -32,15 +35,24 @@ classic/
 | `boost` | 0 to 100: how much brighter colours get |
 | `lift` | 0 to 60: how dark a grey has to be to become full ink |
 | `bar` | 0 to 15: the top bar's colour, one of the DS profile colours |
+| `layout` | The elements, as the editor's JSON tab shows them |
 
 The app loads themes from two folders when it starts:
 
-- `app/assets/themes/`: the built-in ones, Classic and Dark. They can't be changed from the editor.
-- `%LOCALAPPDATA%\DSDisplay\data\themes\`: your own. **Save** in the **DS theme** menu makes a
-  folder here, with a copy of the current theme's art to change as you like.
+- `app/assets/themes/`: the built-in ones, Classic and Dark.
+- `%LOCALAPPDATA%\DSDisplay\data\themes\`: your own, and your changes to the built-in ones.
 
-`art:` paths, like `art:topbar/11.png`, come from the active theme's folder, as do the editor's
-own buttons, icons and sounds. Restart the app to pick up art you've changed.
+Editing works on the active theme, and switching themes switches the layout too.
+
+- **Save as a new name**, in the **DS theme** menu, copies the whole active theme: layout, art and
+  uploads.
+- **Changing a built-in theme** writes a copy of it to your folder, which is used from then on.
+  **Reset** puts the original back.
+- **Delete** removes one of your themes, with its folder.
+
+`art:` paths, like `art:topbar/11.png` or `art:uploads/cat.gif`, come from the active theme's
+folder, as do the editor's own buttons, icons and sounds. Restart the app to pick up art you've
+changed outside the editor.
 
 ## Templates
 
@@ -114,8 +126,8 @@ A child is any built-in element: `image`, `text`, `clock`, `calendar`, `bar`, `g
 
 ### Files and art
 
-`art:` refers to the active theme's folder, and `local:` to files you've uploaded in the editor. To share a template that uses your own images, send the images along with
-it, for upload.
+`art:` paths come from the active theme's folder, so a template's images need to be in every theme
+that uses it. To share a template that uses your own images, send the images along with it.
 
 ## Element types
 

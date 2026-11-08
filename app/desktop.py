@@ -31,7 +31,6 @@ def run_app(open_browser: bool):
     from dsdash.server import create_server
     from dsdash.tray import Tray
 
-    layout.seed_user_data()
     app = App()
     try:
         server = create_server(app, PORT)

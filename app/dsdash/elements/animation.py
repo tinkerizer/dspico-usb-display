@@ -3,7 +3,7 @@ draw = None     # GIFs are played by the DS itself. See device.py.
 SCHEMA = {
     "label": "Animation", "size": [100, 68],
     "props": [
-        {"key": "file", "label": "GIF", "kind": "file", "default": "local:cloud.gif"},
+        {"key": "file", "label": "GIF", "kind": "file", "default": "art:uploads/cloud.gif"},
         {"key": "crop_x", "label": "Crop X", "kind": "number", "default": 0, "min": 0, "max": 2048},
         {"key": "crop_y", "label": "Crop Y", "kind": "number", "default": 0, "min": 0, "max": 2048},
         {"key": "crop_w", "label": "Crop width", "kind": "number", "default": 0, "min": 0, "max": 2048},

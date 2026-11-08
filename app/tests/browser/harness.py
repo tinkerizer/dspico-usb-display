@@ -61,7 +61,7 @@ def _copy_app(root: Path):
 
 def _write_fixtures(local: Path):
     """Art made here, so these tests don't depend on the git-ignored files."""
-    local.mkdir(parents=True)
+    local.mkdir(parents=True, exist_ok=True)
     colours = np.random.default_rng(7).integers(0, 255, (12, 16, 3), dtype=np.uint8)
     Image.fromarray(colours.repeat(SCALE, 0).repeat(SCALE, 1)).save(local / "blocks.png")
     frames = [Image.new("RGB", (40, 36), ANIMATION_COLOUR) for _ in range(2)]
@@ -96,16 +96,15 @@ def start(root: Path, port: int):
     from dsdash.firmware import FirmwareKeeper
 
     layouts = layouts_module
-    for path in (Path(dsdash.__file__), layouts.LAYOUT_PATH):
+    for path in (Path(dsdash.__file__), layouts.LOCAL_DIR):
         if root.resolve() not in path.resolve().parents:
             raise AssertionError(f"{path} is outside the temporary copy {root}")
-    _write_fixtures(layouts.LOCAL_DIR)
-
     DsDevice.start = lambda self: None
     FirmwareKeeper.start = lambda self: None
     logging.disable(logging.WARNING)
 
     app = App()
+    _write_fixtures(app.themes.uploads_dir())
     app.set_layout(test_layout())
     app.start()
     http = server.create_server(app, port)
@@ -149,7 +148,7 @@ def test_layout() -> dict:
 
 def image_element(id_: str, x: int, y: int, w: int, h: int, **props) -> dict:
     return {"id": id_, "type": "image", "x": x, "y": y, "w": w, "h": h,
-            "props": {"file": "local:blocks.png", **props}}
+            "props": {"file": "art:uploads/blocks.png", **props}}
 
 
 def changed(update) -> dict:

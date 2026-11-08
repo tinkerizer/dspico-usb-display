@@ -1,9 +1,8 @@
 """Dashboards as data: a list of elements, the schema that describes them, and validation."""
-import json
 import os
 import re
-import shutil
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Dict, List
 
@@ -15,11 +14,9 @@ FROZEN = getattr(sys, "frozen", False)
 ROOT = Path(sys._MEIPASS) if FROZEN else Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
 THEMES_DIR = ASSETS / "themes"
-ART_DIR = THEMES_DIR / "classic"    # The active theme's folder. themes.ThemeStore changes it.
-SEED_DIR = ASSETS / "local"
+ART_DIR = THEMES_DIR / "classic"    # The active theme's folder, which art: paths are in. themes.ThemeStore sets it.
 APP_DATA = Path(os.environ.get("LOCALAPPDATA", ".")) / "DSDisplay"
-LOCAL_DIR = APP_DATA / "data" if FROZEN else SEED_DIR
-LAYOUT_PATH = LOCAL_DIR / "layout.json"
+LOCAL_DIR = APP_DATA / "data" if FROZEN else ASSETS / "local"
 
 WIDTH, HEIGHT = 256, 384
 PROFILE_COLOUR = "#005af6"  # Blue, matching topbar/11.png.
@@ -109,10 +106,10 @@ class LayoutError(ValueError):
 
 
 def resolve_file(reference: str) -> Path:
-    """Maps art:path or local:name to a real file, refusing anything outside those folders."""
+    """Maps art:path to a file in the active theme's folder, refusing anything outside it."""
     prefix, _, name = reference.partition(":")
-    base = {"art": ART_DIR, "local": LOCAL_DIR}.get(prefix)
-    if base is None or not name:
+    base = ART_DIR
+    if prefix != "art" or not name:
         raise LayoutError(f"Bad file reference {reference!r}")
 
     path = (base / name).resolve()
@@ -122,13 +119,8 @@ def resolve_file(reference: str) -> Path:
 
 
 def list_files() -> List[str]:
-    files = []
-    for prefix, base in (("art", ART_DIR), ("local", LOCAL_DIR)):
-        if base.exists():
-            for path in sorted(base.rglob("*")):
-                if path.suffix.lower() in IMAGE_SUFFIXES:
-                    files.append(f"{prefix}:{path.relative_to(base).as_posix()}")
-    return files
+    return [f"art:{path.relative_to(ART_DIR).as_posix()}" for path in sorted(ART_DIR.rglob("*"))
+            if path.suffix.lower() in IMAGE_SUFFIXES]
 
 
 def safe_upload_name(name: str) -> str:
@@ -202,17 +194,6 @@ def validate(layout: dict, lenient=False) -> dict:
     return {"version": 1, "elements": clean}
 
 
-def seed_user_data():
-    """Copies the bundled starter files, leaving anything already there alone."""
-    if LOCAL_DIR == SEED_DIR or not SEED_DIR.exists():
-        return
-    LOCAL_DIR.mkdir(parents=True, exist_ok=True)
-    for source in SEED_DIR.iterdir():
-        target = LOCAL_DIR / source.name
-        if source.is_file() and not target.exists():
-            shutil.copy2(source, target)
-
-
 LEGACY_TOP_BAR = ("top_bar", "bar_name", "bar_time", "bar_date", "bar_usb", "bar_battery")
 
 
@@ -240,21 +221,21 @@ def upgrade_top_bar(layout: dict) -> dict:
     return {**layout, "elements": elements}
 
 
-def load() -> dict:
-    if LAYOUT_PATH.exists():
-        try:
-            return validate(upgrade_top_bar(json.loads(LAYOUT_PATH.read_text(encoding="utf-8"))), lenient=True)
-        except (ValueError, OSError):
-            pass    # A bad file shouldn't stop the display
-    return validate(default_layout())
+def upgrade_uploads(layout: dict) -> dict:
+    """Uploads used to be shared as local:name. They're now in each theme's uploads folder."""
+    for element in layout.get("elements", []):
+        for key, value in element.get("props", {}).items():
+            if isinstance(value, str) and value.startswith("local:"):
+                element["props"][key] = "art:uploads/" + value[len("local:"):]
+    return layout
 
 
-def save(layout: dict):
-    """Writes through a temporary file, so a crash can't leave half a layout."""
-    LOCAL_DIR.mkdir(parents=True, exist_ok=True)
-    temporary = LAYOUT_PATH.with_suffix(".tmp")
-    temporary.write_text(json.dumps(layout, indent=2), encoding="utf-8")
-    os.replace(temporary, LAYOUT_PATH)
+def from_saved(layout) -> dict:
+    """A theme's layout, from its file. A bad one gives the default, as it shouldn't stop the display."""
+    try:
+        return validate(upgrade_top_bar(upgrade_uploads(deepcopy(layout))), lenient=True)
+    except (LayoutError, TypeError, AttributeError):
+        return validate(default_layout())
 
 
 from . import templates  # noqa: E402  Needs this module's SCHEMA and paths, so comes last.

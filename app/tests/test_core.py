@@ -319,7 +319,7 @@ class DashboardTests(unittest.TestCase):
 
     def test_broken_element_does_not_stop_rendering(self):
         clean = layout.validate(layout.default_layout())
-        clean["elements"][0]["props"]["file"] = "local:missing.png"
+        clean["elements"][0]["props"]["file"] = "art:uploads/missing.png"
         self.assertEqual(widgets.render(clean, Stats(), datetime(2026, 1, 1)).size, (256, 384))
 
     def test_hidden_elements_are_not_drawn(self):
@@ -355,15 +355,16 @@ class ThemeTests(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        self.path = Path(folder.name) / "themes.json"
-        self.user_dir = Path(folder.name) / "themes"
+        self.data = Path(folder.name)
+        self.path = self.data / "themes.json"
+        self.user_dir = self.data / "themes"
         art = layout.ART_DIR
         self.addCleanup(setattr, layout, "ART_DIR", art)
         self.store = self.reopen()
         self.own = {"paper": "#102030", "ink": "#ffffff", "boost": 10, "lift": 0, "bar": 3}
 
     def reopen(self):
-        return themes.ThemeStore(self.path, self.user_dir)
+        return themes.ThemeStore(self.data)
 
     def test_classic_leaves_the_frame_alone(self):
         frame = Image.new("RGB", (4, 4), "#808080")
@@ -426,11 +427,51 @@ class ThemeTests(unittest.TestCase):
         store.use("Old")
         self.assertEqual(json.loads(self.path.read_text()), {"active": "Old"})
 
-    def test_built_in_themes_are_protected(self):
-        with self.assertRaises(ValueError):
-            self.store.save("Dark", self.own)
+    def test_changing_a_built_in_theme_changes_a_copy_that_reset_removes(self):
+        original = themes.read(self.store.built_in["Dark"])
+        self.store.save("Dark", self.own)
+        self.assertEqual(self.store.folder, self.user_dir / "dark")
+        self.assertEqual(themes.read(self.store.built_in["Dark"]), original)
+        self.assertEqual(self.reopen().active, self.own)
+        self.store.delete("Dark")
+        self.assertEqual(self.store.active, original)
+        self.assertFalse((self.user_dir / "dark").exists())
         with self.assertRaises(ValueError):
             self.store.delete("Classic")
+
+    def test_each_theme_has_its_own_layout(self):
+        mine = layout.validate({"elements": [{"id": "only", "type": "text", "x": 1, "y": 2, "w": 30, "h": 12, "props": {}}]})
+        self.store.save("Mine", self.own)
+        self.store.save_layout(mine)
+        self.assertEqual(self.reopen().layout, mine)
+        self.store.use("Classic")
+        self.assertEqual(self.store.layout, layout.validate(layout.default_layout()))
+        self.assertEqual(themes.read_layout(self.store.built_in["Classic"]), self.store.layout)
+        self.store.save("Copy", self.own)      # From Classic, so with its layout
+        self.assertEqual(self.store.layout, layout.validate(layout.default_layout()))
+
+    def test_uploads_go_in_the_theme(self):
+        self.store.use("Dark")
+        folder = self.store.uploads_dir()
+        self.assertEqual(folder, self.user_dir / "dark" / "uploads")
+
+    def test_the_old_shared_layout_and_uploads_move_into_the_themes(self):
+        old = layout.validate(layout.default_layout())
+        old["elements"] = old["elements"][:3]
+        shared = json.loads(json.dumps(old))
+        shared["elements"][0]["props"]["file"] = "local:mine.png"
+        (self.data / "layout.json").write_text(json.dumps(shared), encoding="utf-8")
+        Image.new("RGB", (2, 2)).save(self.data / "mine.png")
+        self.path.write_text(json.dumps({"active": "Dark", "themes": {"Old": self.own}}), encoding="utf-8")
+        store = self.reopen()
+        self.assertEqual(store.active_name, "Dark")
+        for name in ("Dark", "Old"):
+            with self.subTest(name):
+                store.use(name)
+                self.assertEqual(store.layout["elements"][0]["props"]["file"], "art:uploads/mine.png")
+                self.assertTrue((store.folder / "uploads" / "mine.png").is_file())
+        self.assertFalse((self.data / "layout.json").exists())
+        self.assertTrue((self.data / "layout.json.old").exists())
 
     def test_deleting_the_active_theme_falls_back(self):
         self.store.save("Mine", self.own)
@@ -603,11 +644,12 @@ class RevisionTests(unittest.TestCase):
         from dsdash.server import create_server
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        for name, value in (("LOCAL_DIR", Path(folder.name)), ("LAYOUT_PATH", Path(folder.name) / "layout.json")):
+        for name, value in (("LOCAL_DIR", Path(folder.name)), ("ART_DIR", layout.ART_DIR)):
             patcher = mock.patch.object(layout, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
         self.app = App()
+        self.saved = lambda: self.app.themes.folder / "theme.json"
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             self.port = probe.getsockname()[1]
@@ -638,13 +680,13 @@ class RevisionTests(unittest.TestCase):
     def test_an_out_of_date_save_is_refused(self):
         _, _, seen = self.call("GET", "/api/layout")
         self.post(seen)
-        before = layout.LAYOUT_PATH.read_bytes()
+        before = self.saved().read_bytes()
         stale = dict(self.app.layout, elements=[])
         status, body, latest = self.call("POST", "/api/layout", json.dumps(stale), seen)
         self.assertEqual(status, 409)
         self.assertIn("error", body)
         self.assertEqual(int(latest), int(seen) + 1)
-        self.assertEqual(layout.LAYOUT_PATH.read_bytes(), before)
+        self.assertEqual(self.saved().read_bytes(), before)
         self.assertTrue(self.app.layout["elements"])
 
     def test_an_out_of_date_reset_is_refused(self):
@@ -668,7 +710,7 @@ class RevisionTests(unittest.TestCase):
     def test_the_revision_stays_out_of_the_layout(self):
         _, body, seen = self.post(self.app.revision)
         self.assertNotIn(seen, json.dumps(body))
-        saved = json.loads(layout.LAYOUT_PATH.read_text(encoding="utf-8"))
+        saved = json.loads(self.saved().read_text(encoding="utf-8"))["layout"]
         self.assertEqual(saved, body)
         self.assertNotIn("revision", json.dumps(saved).lower())
 

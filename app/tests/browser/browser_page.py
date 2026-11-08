@@ -253,3 +253,21 @@ class PageLoadTests(BrowserCase):
         self.check_loaded(page)
         page.click("#toggleLayers")
         page.wait_for_selector("#list .item", state="visible")
+
+
+class ThemeLayoutTests(BrowserCase):
+    def test_each_theme_keeps_its_own_layout(self):
+        page = self.open()
+        count = page.evaluate("layout.elements.length")
+        page.evaluate("""async () => {
+          const listing = await api('/api/themes');
+          await changeDsTheme({ action: 'save', name: 'Mine', theme: listing.themes[listing.active] });
+        }""")
+        self.addCleanup(page.evaluate, "changeDsTheme({ action: 'delete', name: 'Mine' })")
+        page.evaluate("async () => { remember(); layout.elements.pop(); renderAll(); saveSoon(); }")
+        page.evaluate("changeDsTheme({ action: 'use', name: 'Classic' })")
+        self.assertEqual(page.evaluate("layout.elements.length"), count)
+        self.assertEqual(page.evaluate("undoStack.length"), 0, "Undo shouldn't reach into another theme")
+        page.evaluate("changeDsTheme({ action: 'use', name: 'Mine' })")
+        self.assertEqual(page.evaluate("layout.elements.length"), count - 1, "The edit before switching was lost")
+        page.evaluate("changeDsTheme({ action: 'use', name: 'Classic' })")

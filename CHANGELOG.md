@@ -5,9 +5,11 @@ version as the release notes.
 
 ## Unreleased
 
-- **Theme folders:** each theme is a folder with its colours and all of its art and sounds, in
-  `app/assets/themes/` or, for your own, the app's data folder. Saved themes are converted on first
-  start, with a copy of Classic's art.
+- **Themes are whole dashboards:** each theme is a folder with its own layout, colours, art,
+  sounds and uploads, so switching theme switches everything. Save as copies the whole theme.
+  Changing Classic or Dark keeps a copy of your own, and **Reset** puts the original back.
+- **Moving over:** saved themes become folders. The shared layout and uploads go to the active
+  theme and your saved ones, and the old `layout.json` is kept as `layout.json.old`.
 
 ## 1.0.1
 

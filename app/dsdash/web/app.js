@@ -1372,8 +1372,30 @@ setTheme(document.documentElement.dataset.theme || "light");
 let dsThemes = null, dsTheme = null, dsThemeTimer = null;
 
 async function changeDsTheme(request) {
-  dsThemes = await api("/api/themes", { method: "POST", body: JSON.stringify(request) });
-  refreshFrame();
+  if (request.action === "preview") {
+    dsThemes = await api("/api/themes", { method: "POST", body: JSON.stringify(request) });
+    refreshFrame();
+    return;
+  }
+  // Each theme has its own layout: save this one's last edit, then load the next one's.
+  pulling = true;     // Keeps the status poll from pulling it halfway
+  try {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; await save(); }
+    await lastWrite;
+    dsThemes = await api("/api/themes", { method: "POST", body: JSON.stringify(request) });
+    const latest = await send("/api/layout");
+    layout = latest.body;
+    revision = latest.revision;
+    unsaved = false;
+    undoStack = [];
+    redoStack = [];
+    selectedId = null;
+    updateHistoryButtons();
+    renderAll();
+    refreshFrame();
+  } finally {
+    pulling = false;
+  }
 }
 
 function showDsTheme(name) {
@@ -1386,7 +1408,9 @@ function showDsTheme(name) {
   $("dsThemeLift").value = dsTheme.lift;
   $("dsThemeLiftValue").textContent = `${dsTheme.lift}%`;
   $("dsThemeName").value = dsThemes.builtIn.includes(name) ? "" : name;
-  $("dsThemeDelete").disabled = dsThemes.builtIn.includes(name);
+  const builtIn = dsThemes.builtIn.includes(name);
+  $("dsThemeDelete").disabled = builtIn && !dsThemes.edited.includes(name);
+  $("dsThemeDelete").textContent = builtIn ? "Reset" : "Delete";
   $("dsThemeBars").replaceChildren(...dsThemes.colours.map((colour, index) => {
     const swatch = document.createElement("button");
     swatch.className = "shell-swatch";
@@ -1434,9 +1458,11 @@ $("dsThemeSave").addEventListener("click", async () => {
   } catch (error) { toast(error.message, true); }
 });
 $("dsThemeDelete").addEventListener("click", async () => {
-  await changeDsTheme({ action: "delete", name: $("dsThemeSelect").value });
+  const name = $("dsThemeSelect").value, builtIn = dsThemes.builtIn.includes(name);
+  if (!await confirmDialog(builtIn ? `Put ${name} back as it came, losing your changes to it?` : `Delete ${name}, with its layout and images?`)) return;
+  await changeDsTheme({ action: "delete", name });
   showDsTheme(dsThemes.active);
-  toast("Theme deleted");
+  toast(builtIn ? "Theme reset" : "Theme deleted");
 });
 $("dsThemeButton").addEventListener("click", async () => {
   play("select");
