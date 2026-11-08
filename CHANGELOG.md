@@ -3,7 +3,7 @@
 Each release's version is in [VERSION](VERSION). `tools/release --publish` uses the section for that
 version as the release notes.
 
-## Unreleased
+## 1.2.0
 
 - **Sleep screen:** when the PC sleeps, the DS shows a sleeping cat at low brightness on black,
   instead of the last picture at full brightness. Each theme picks its GIF, screen and brightness,
