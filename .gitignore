@@ -12,9 +12,8 @@ __pycache__/
 .vscode/
 ds/common/BuildId.h
 ds/.build_number
-app/assets/classic-ds/
-app/assets/local/
 app/dist/
 tools/shell-lab/refs/
 tools/shell-lab/*.ttf
 release/
+*:Zone.Identifier

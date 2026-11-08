@@ -3,6 +3,10 @@
 Each release's version is in [VERSION](VERSION). `tools/release --publish` uses the section for that
 version as the release notes.
 
+## 1.0.1
+
+- **Releases:** `tools/release --publish` works on a public repository too.
+
 ## 1.0.0
 
 The first versioned release.

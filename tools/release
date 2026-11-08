@@ -3,8 +3,7 @@
 # app for the SD card, and install steps. The version is in VERSION, and its notes in CHANGELOG.md.
 #
 #   tools/release              build the files only
-#   tools/release --publish    also tag v<version> and publish it as a GitHub release on this
-#                              (private) repo, using gh
+#   tools/release --publish    also tag v<version> and publish it as a GitHub release, using gh
 set -euo pipefail
 publish=false
 [ "${1:-}" = "--publish" ] && publish=true
@@ -47,10 +46,6 @@ awk -v head="## $version" '$0 == head {on = 1; next} on && /^## / {exit} on' CHA
 echo "Built $out"
 
 if $publish; then
-    if [ "$(gh repo view --json visibility -q .visibility)" != "PRIVATE" ]; then
-        echo "Not publishing: the repo isn't private, and the release includes the DS menu art." >&2
-        exit 1
-    fi
     git push -q origin HEAD
     git tag -a "$tag" -m "DS Display $version"
     git push -q origin "$tag"
