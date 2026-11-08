@@ -103,11 +103,12 @@ Working on hardware. A GIF uploads once and the ARM9 plays it, so frames use no 
 traffic stayed at about 0.4 KB/s with an animation running.
 
 - [x] `ANIM_BEGIN`, `ANIM_FRAME`, `ANIM_PLAY`, `ANIM_STOP`, `ANIM_RESET` packets, 8 slots.
-- [x] Host encoder: first frame plus changed-area frames, composited onto the theme
-      background so the DS needs no transparency handling. Per-frame delays are kept.
+- [x] Host encoder: first frame plus changed-area frames, with transparent pixels marked by
+      bit 15 clear. Per-frame delays are kept.
+- [x] Transparency on the DS: the ARM9 keeps a copy of the live picture and which animation
+      covers each pixel, so live values show through a GIF's transparent parts.
 - [x] ARM9 player, timed from VBlank, running alongside stat updates.
 - [x] 512 KB store. Oversized assets are rejected on the host.
-- [x] `ANIMATIONS:` theme section. Files in a theme's `local/` folder are not committed.
 - [ ] Confirm animations come back after a push or reconnect.
 - [ ] Bigger store if needed: 1.75 MB is possible by sharing the push staging area.
 - [ ] Tearing on larger animations. The bottom screen can't double-buffer: VRAM C is
@@ -142,15 +143,19 @@ replace old ones, so a slow link skips ahead instead of building a backlog.
 - [ ] Settings saved between runs.
 - [x] GPU load, GPU memory and temperature: NVML on NVIDIA, Windows counters otherwise.
       NVML hasn't been run on real hardware yet.
-- [ ] Multiple saved layouts.
+- [x] Multiple saved layouts: each theme is a folder with its own layout, colours, art and
+      uploads. See [THEMES.md](THEMES.md).
+- [x] Templates and element types, so others can add elements. See [THEMES.md](THEMES.md).
+- [x] Small preview of the whole DS, and a screens-only editor at 2x or more, with snapping.
+- [x] Versioned releases: `VERSION`, `CHANGELOG.md` and `tools/release`.
 - [ ] DS status and logs in the web UI.
 
 ## Phase 7: DS home screen dashboard
 
 Working, as the default layout. It follows the real menu's structure: clock and calendar on
 top, then a game card, two panels, a slim slot and the footer strip. Buttons are the real
-`grf/box.bmp` art, stretched by its edges. That art and personal GIFs are git-ignored, so
-copy them over on a new machine.
+`grf/box.bmp` art, stretched by its edges. The art is in each theme's folder, in
+`app/assets/themes/`.
 
 - [ ] Use more of the menu art: icons, shoulder buttons, battery and volume indicators.
 
@@ -167,8 +172,8 @@ gap for the hinge.
       `--ds-color`, and switches `--ds-label` to dark on pale shells.
 - [x] Hinge gap in the preview only. Layouts stay 256x384. `viewTop`, `viewBottom` and
       `fromView` in `app.js` convert rows, and a drag that stops in the hinge lands on the seam.
-- [x] Preview snaps to whole device pixels per DS pixel, sized so both screens fit. The shell
-      can run past the window, so the page scrolls and the tools sit in a column beside it.
+- [x] Preview snaps to whole device pixels per DS pixel, sized so the whole shell fits, with
+      the tools in a row below it. **Fill** sizes it to the window instead.
 - [ ] Pixels aren't exact at fractional Windows scaling (125%, some sizes at 150%).
 - [ ] Web UI sometimes stalls or won't load. Windows TCP timers looked stopped: `TIME_WAIT`
       never expired, and a new connection that landed on an old one hung. The server now

@@ -3,7 +3,7 @@
 Each release's version is in [VERSION](VERSION). `tools/release --publish` uses the section for that
 version as the release notes.
 
-## Unreleased
+## 1.1.0
 
 - **Themes are whole dashboards:** each theme is a folder with its own layout, colours, art,
   sounds and uploads, so switching theme switches everything. Save as copies the whole theme.

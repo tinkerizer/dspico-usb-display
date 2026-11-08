@@ -19,8 +19,10 @@ in [docs/PLAN.md](docs/PLAN.md).
 
   <img src="docs/images/editor-dsi.png" alt="The editor with a DSi" width="49%"> <img src="docs/images/shell-picker.png" alt="Choosing a shell" width="49%">
 
-- **Real DS look:** themes use the classic DS menu's art. GIFs play on the DS itself, with live
-  values showing through their transparent parts.
+- **Themes:** each theme is a whole dashboard in one folder: its layout, colours, the classic DS
+  menu's art, and your images and GIFs. Switch between them, save copies, or share a folder. GIFs
+  play on the DS itself, with live values showing through their transparent parts. See
+  [docs/THEMES.md](docs/THEMES.md).
 
   <img src="docs/images/ds-screens.png" alt="The DS's own screens" width="256">
 
