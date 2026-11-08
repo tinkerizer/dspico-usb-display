@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Runs the app tests for what changed since the last commit. --all runs all of those.
+# --browser runs the Chrome tests in app/tests/browser instead, and passes on -k and -v.
+# Those take most of a minute, so changes that need them only get a reminder here.
+# tools/test_ds_hw.py needs a DS, so run that by hand.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+all=${1:-}
+if [ "$all" = --browser ]; then
+    shift
+    cd app
+    exec python.exe tests/browser/run.py "$@"
+fi
+
+tests=()
+browser=
+while read -r file; do
+    case "$file" in
+        app/dsdash/codec.py)    tests+=(CodecTests AnimationTests AnimationScreenTests DeviceTests) ;;
+        app/dsdash/device.py)   tests+=(DeviceTests AnimationTests AnimationScreenTests) ;;
+        app/dsdash/layout.py)   tests+=(LayoutTests DashboardTests) ;;
+        app/dsdash/widgets.py)  tests+=(DashboardTests UsbIconTests CalendarTests TemperatureTests) ;;
+        app/dsdash/server.py)   tests+=(ServerTests ConnectionTests RevisionTests); browser=yes ;;
+        app/dsdash/firmware.py) tests+=(FirmwareTests) ;;
+        app/dsdash/themes.py)   tests+=(ThemeTests) ;;
+        app/dsdash/gpu.py)      tests+=(GpuTests) ;;
+        app/dsdash/installer.py) tests+=(InstallerTests) ;;
+        tools/dsctl.py|libs/dsupdate/host/*) tests+=(FirmwareTests) ;;
+        app/dsdash/web/*|app/tests/browser/*) browser=yes ;;
+        docs/*|*.md|tools/check|app/run.py|app/build_windows.py) ;;
+        app/*)                  all=--all ;;
+    esac
+done < <(git diff --name-only HEAD; git ls-files --others --exclude-standard)
+
+if [ -n "$browser" ]; then
+    echo "Web files changed: run tools/check --browser"
+fi
+
+cd app
+if [ "$all" = --all ]; then
+    exec python.exe -m unittest discover -s tests
+elif [ ${#tests[@]} -eq 0 ]; then
+    echo "No app tests for these changes."
+else
+    filters=()
+    for name in $(printf '%s\n' "${tests[@]}" | sort -u); do filters+=(-k "$name"); done
+    echo "Running: ${filters[*]//-k/}"
+    exec python.exe -m unittest discover -s tests "${filters[@]}"
+fi

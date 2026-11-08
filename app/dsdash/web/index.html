@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DS Display</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/web/app.css">
+<script>
+  // Before the page draws, so it doesn't flash light.
+  try { document.documentElement.dataset.theme = localStorage.getItem("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); } catch {}
+</script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">DS Display <span class="version" id="version"></span></div>
+  <div class="chip" id="linkChip"><span class="dot" id="dot"></span><span id="link">Connecting…</span></div>
+  <div class="meters">
+    <div class="meter"><span>CPU</span><i><b id="cpuBar"></b></i><span id="cpu">–</span></div>
+    <div class="meter"><span>RAM</span><i><b id="ramBar"></b></i><span id="ram">–</span></div>
+    <div class="meter sent"><span>USB</span><span id="sent">–</span></div>
+  </div>
+  <div class="spacer"></div>
+  <button class="ds-button" id="dsThemeButton" aria-haspopup="dialog" aria-expanded="false">DS theme</button>
+  <button class="ds-button" id="shellButton" aria-haspopup="dialog" aria-expanded="false">Shell</button>
+  <button class="ds-button" id="brightnessButton" aria-haspopup="dialog" aria-expanded="false">Brightness</button>
+  <button class="ds-button" id="fitButton" aria-pressed="false">Pixel perfect</button>
+  <button class="ds-button" id="themeButton">Dark</button>
+  <button class="ds-button" id="soundButton" aria-pressed="true">Sound on</button>
+</header>
+
+<main>
+  <aside class="drawer" id="drawer" hidden>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="layersTab" aria-controls="layersPane">Layers</button>
+      <button role="tab" id="jsonTab" aria-controls="jsonPanel">JSON</button>
+      <span class="tab-mark" id="tabMark"></span>
+    </div>
+
+    <section id="layersPane" class="pane">
+      <div id="list"></div>
+      <div class="row">
+        <button class="ds-button" id="forward">Forward</button>
+        <button class="ds-button" id="back">Back</button>
+      </div>
+    </section>
+
+    <section id="jsonPanel" class="pane" hidden>
+      <div class="code">
+        <pre id="jsonView" aria-hidden="true"></pre>
+        <textarea id="json" spellcheck="false" wrap="off" aria-label="Layout JSON"></textarea>
+      </div>
+      <p id="jsonState" class="hint"></p>
+      <p id="jsonError" class="error-text"></p>
+      <div class="row">
+        <button class="ds-button" id="applyJson">Apply</button>
+        <button class="ds-button" id="revertJson">Discard edits</button>
+      </div>
+    </section>
+  </aside>
+
+  <div class="stage">
+    <div class="console">
+      <div class="shell-art" id="shellArt"></div>
+      <button class="ds-button done" id="doneButton">Done</button>
+      <div class="screens" id="screens">
+        <div class="lcd top"><div class="lcd-content">
+          <img class="lcd-frame" alt="Live DS top screen">
+          <div class="animations"></div>
+        </div></div>
+        <div class="lcd bottom"><div class="lcd-content">
+          <img class="lcd-frame" alt="Live DS bottom screen">
+          <div class="animations"></div>
+        </div></div>
+        <div id="overlay"></div>
+      </div>
+    </div>
+    <nav class="dock" aria-label="Tools">
+      <button class="tile" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><span class="icon undo"></span><span class="tool-label">Undo</span></button>
+      <button class="tile" id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><span class="icon redo"></span><span class="tool-label">Redo</span></button>
+      <button class="tile" id="addButton" title="Add" aria-label="Add" aria-haspopup="dialog" aria-expanded="false"><span class="icon add"></span><span class="tool-label">Add</span></button>
+      <button class="tile" id="toggleLayers" title="Layers" aria-label="Layers" aria-expanded="false"><span class="icon layers"></span><span class="tool-label">Layers</span></button>
+      <button class="tile" id="toggleJson" title="JSON" aria-label="JSON" aria-expanded="false" aria-controls="jsonPanel"><span class="icon code-icon"></span><span class="tool-label">JSON</span></button>
+      <label class="tile" title="Upload"><span class="icon upload"></span><span class="tool-label">Upload</span><input id="upload" aria-label="Upload" type="file" accept="image/gif,image/png,image/bmp"></label>
+      <button class="tile" id="reset" title="Reset" aria-label="Reset"><span class="icon reset"></span><span class="tool-label">Reset</span></button>
+    </nav>
+  </div>
+</main>
+
+<div class="bubble" id="inspector" role="dialog" aria-labelledby="inspectorTitle" hidden>
+  <span class="tail" id="inspectorTail"></span>
+  <div class="bubble-head">
+    <h2 id="inspectorTitle">Properties</h2>
+    <button class="close" id="closeInspector" aria-label="Close">×</button>
+  </div>
+  <div class="bubble-scroll"><div id="fields"></div></div>
+</div>
+
+<div class="bubble" id="addMenu" role="dialog" aria-label="Add element" hidden>
+  <span class="tail" id="addTail"></span>
+  <div class="add-grid" id="addGrid"></div>
+</div>
+
+<div class="bubble" id="brightnessMenu" role="dialog" aria-label="Brightness" hidden>
+  <span class="tail" id="brightnessTail"></span>
+  <label class="field">Brightness <output id="brightnessValue"></output>
+    <input id="brightness" type="range" min="0" max="100" step="5">
+  </label>
+</div>
+
+<div class="bubble" id="dsThemeMenu" role="dialog" aria-label="DS theme" hidden>
+  <span class="tail" id="dsThemeTail"></span>
+  <label class="field">Theme <select id="dsThemeSelect"></select></label>
+  <label class="field">Paper <input id="dsThemePaper" type="color"></label>
+  <label class="field">Ink <input id="dsThemeInk" type="color"></label>
+  <label class="field">Colour boost <output id="dsThemeBoostValue"></output>
+    <input id="dsThemeBoost" type="range" min="0" max="100" step="5">
+  </label>
+  <label class="field">Text lift <output id="dsThemeLiftValue"></output>
+    <input id="dsThemeLift" type="range" min="0" max="60" step="5">
+  </label>
+  <div class="field">Bar colour</div>
+  <div class="swatches bars" id="dsThemeBars"></div>
+  <label class="field">Save as <input id="dsThemeName" type="text" maxlength="24" placeholder="Theme name"></label>
+  <div class="row">
+    <button class="ds-button" id="dsThemeSave">Save</button>
+    <button class="ds-button" id="dsThemeDelete">Delete</button>
+  </div>
+</div>
+
+<div class="bubble" id="shellMenu" role="dialog" aria-label="Shell colour" hidden>
+  <span class="tail" id="shellTail"></span>
+  <div class="row" id="shellModels">
+    <button class="ds-button" data-model="lite">DS Lite</button>
+    <button class="ds-button" data-model="dsi">DSi</button>
+  </div>
+  <div class="swatches" id="swatches"></div>
+  <label class="field">Custom colour <input id="shellColour" type="color"></label>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="dialog" role="alertdialog" aria-labelledby="modalText">
+    <p id="modalText"></p>
+    <div class="row center">
+      <button class="dialog-button" id="modalYes">Yes</button>
+      <button class="dialog-button" id="modalNo">No</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" role="status"></div>
+
+<script src="/web/vendor/motion.js"></script>
+<script src="/web/vendor/floating-ui.core.umd.min.js"></script>
+<script src="/web/vendor/floating-ui.dom.umd.min.js"></script>
+<script src="/web/effects.js"></script>
+<script src="/web/app.js"></script>
+</body>
+</html>

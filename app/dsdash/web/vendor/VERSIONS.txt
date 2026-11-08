@@ -1,0 +1,4 @@
+motion 14.4.0 (MIT)
+@floating-ui/dom 1.8.0 (MIT)
+Varela Round, as outlines in shell.svg (SIL OFL 1.1)
+pixelarticons (MIT): undo, redo and refresh-solid, in the tool tiles

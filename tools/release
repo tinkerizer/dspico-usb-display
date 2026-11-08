@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Builds everything and puts the release files in release/<version>/: the Windows installer, the DS
+# app for the SD card, and install steps. The version is in VERSION, and its notes in CHANGELOG.md.
+#
+#   tools/release              build the files only
+#   tools/release --publish    also tag v<version> and publish it as a GitHub release on this
+#                              (private) repo, using gh
+set -euo pipefail
+publish=false
+[ "${1:-}" = "--publish" ] && publish=true
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo"
+
+version="$(tr -d '[:space:]' < VERSION)"
+tag="v$version"
+if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "VERSION should look like 1.2.3, not '$version'." >&2
+    exit 1
+fi
+if ! grep -q "^## $version\$" CHANGELOG.md; then
+    echo "Add a '## $version' section to CHANGELOG.md first." >&2
+    exit 1
+fi
+if [ -n "$(git status --porcelain)" ]; then
+    echo "Commit first: a release should match a commit." >&2
+    exit 1
+fi
+if $publish && { git rev-parse -q --verify "refs/tags/$tag" >/dev/null || gh release view "$tag" >/dev/null 2>&1; }; then
+    echo "$tag is already released. Raise VERSION for a new one." >&2
+    exit 1
+fi
+
+export DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM
+export PATH=/opt/devkitpro/tools/bin:/opt/devkitpro/devkitARM/bin:$PATH
+make -C ds >/dev/null
+(cd app && python.exe build_windows.py)
+
+out="release/$version"
+rm -rf "$out"
+mkdir -p "$out"
+cp "app/dist/DS Display Setup.exe" "$out/DS-Display-Setup-$version.exe"
+cp ds/usb-display.nds "$out/usb-display.nds"
+sed -e "s/{version}/$version/g" -e "s/{date}/$(date +%F)/g" tools/release-readme.txt > "$out/README.txt"
+# This version's changelog section, then the install steps.
+awk -v head="## $version" '$0 == head {on = 1; next} on && /^## / {exit} on' CHANGELOG.md > "$out/notes.md"
+{ echo; echo '## Install'; echo; sed -n '/^On the PC/,$p' "$out/README.txt"; } >> "$out/notes.md"
+echo "Built $out"
+
+if $publish; then
+    if [ "$(gh repo view --json visibility -q .visibility)" != "PRIVATE" ]; then
+        echo "Not publishing: the repo isn't private, and the release includes the DS menu art." >&2
+        exit 1
+    fi
+    git push -q origin HEAD
+    git tag -a "$tag" -m "DS Display $version"
+    git push -q origin "$tag"
+    gh release create "$tag" "$out/DS-Display-Setup-$version.exe" "$out/usb-display.nds" "$out/README.txt" \
+        --verify-tag --title "DS Display $version" --notes-file "$out/notes.md"
+fi

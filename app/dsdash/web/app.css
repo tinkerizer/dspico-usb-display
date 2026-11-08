@@ -1,0 +1,293 @@
+@font-face { font-family: "Fusion Pixel"; src: url("/font.otf") format("opentype"); font-display: block; }
+
+:root {
+  --line: #d3d3d3; --ink: #3d3d3d; --soft: #6f6e6f; --edge: #929091;
+  --surface: #fff; --hover: #eef2fc; --focus: #cfd9f3; --line-active: #dfe8fb; --line-bad: #fbdcdc;
+  --tok-string: #1f7a2e; --tok-number: #b35a00; --tok-bool: #8a2fb5; --tok-token: #c2185b;
+  --page: #f7f7f7; --page-paper: var(--paper); --page-grid: #aaa;
+  --blue: #0041c3; --red: #d30000; --green: #1f9a37;
+  --stylus: url("/art/ui/stylus.png") 0 63, auto;
+  --paper: repeating-linear-gradient(#fbfbfb 0 1px, #e3e3e3 1px 2px);
+  --shell: #eaebed; --shell-dark: #b2b2b3; --bezel: #3d3d3d; --steel: #3e6b83; --steel-light: #81aec3;
+  /* Where the screens sit in shell.svg. --hinge is in DS pixels. */
+  --shell-ratio: 552 / 575; --lcd-left: calc(148 / 552 * 100%); --lcd-top: calc(42 / 575 * 100%); --lcd-width: calc(256 / 552 * 100%); --hinge: 101;
+  /* Recolours the shell: see shell.svg. Pale shells want a darker label. */
+  --ds-color: #3d3d3d; --ds-label: #e8e8e8;
+}
+
+/* Dark mode. The tools keep --paper, as the icons have it baked in. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --line: #3e3f44; --ink: #e3e3e6; --soft: #a9a9ae; --edge: #66676d;
+  --blue: #6f9dff; --red: #ff6464; --green: #4cc765;
+  --surface: #26272b; --hover: #33353c; --focus: #3a4a70; --line-active: #2f3a52; --line-bad: #532b2b;
+  --tok-string: #7fd08c; --tok-number: #eaa45a; --tok-bool: #c996ea; --tok-token: #f07fae;
+  --page: #1f2023; --page-paper: repeating-linear-gradient(#232428 0 1px, #1e1f22 1px 2px); --page-grid: #3a3b40;
+  --shell: #2f3034; --shell-dark: #17181a; --steel: #8fc0d6; --steel-light: #5c8ca3;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+html { cursor: var(--stylus); }
+body {
+  margin: 0; color: var(--ink); background-color: var(--page);
+  /* The menu's paper, so its icons sit on the page's own background. */
+  background-image: linear-gradient(var(--page-grid) 1px, transparent 1px), linear-gradient(90deg, var(--page-grid) 1px, transparent 1px), var(--page-paper);
+  background-size: 48px 48px, 48px 48px, 2px 2px;
+  /* Anchored to the tools, so the grid runs through their cells. */
+  background-position: var(--grid-x, 0) var(--grid-y, 0), var(--grid-x, 0) var(--grid-y, 0), 0 var(--grid-y, 0);
+  font: 12px/18px "Fusion Pixel", ui-monospace, monospace;
+  -webkit-font-smoothing: none; font-smooth: never; image-rendering: pixelated;
+  overflow-x: hidden;
+}
+
+/* Clicking around shouldn't highlight the page, only what's there to be edited. */
+body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+input, textarea { -webkit-user-select: text; user-select: text; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+/* Real menu art: grf/box.bmp, raised on top and pressed below. */
+.ds-button, .tile, .frame {
+  border-style: solid; border-width: 7px; border-color: transparent;
+  border-image: url("/ui/raised.png") 7 fill / 7px / 0 stretch;
+  background: none; cursor: var(--stylus); image-rendering: pixelated;
+}
+/* Buttons are always on light paper, so they keep the light theme's colours. */
+.ds-button, .tile { --blue: #0041c3; --red: #d30000; color: #3d3d3d; }
+.ds-button { padding: 0 8px; min-height: 30px; }
+.ds-button:hover:not(:disabled), .tile:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 2px 0 rgba(0, 65, 195, .35); }
+.ds-button:active:not(:disabled), .tile:active:not(:disabled) { border-image: url("/ui/flat.png") 7 fill / 7px / 0 stretch; transform: translateY(1px); }
+.ds-button:disabled { opacity: .45; cursor: var(--stylus); }
+/* Dark mode's buttons, in the same shape on its own colours. */
+:root[data-theme="dark"] .ds-button {
+  --blue: var(--steel); color: var(--ink); border: 2px solid var(--edge); border-image: none; padding: 0 12px;
+  background: linear-gradient(#3b3c42, #2c2d31); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09);
+}
+:root[data-theme="dark"] .ds-button:active:not(:disabled) { border-image: none; background: #232428; box-shadow: inset 0 1px 0 rgba(0, 0, 0, .3); }
+:root[data-theme="dark"] .ds-button:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09), 0 2px 0 rgba(143, 192, 214, .35); }
+:focus-visible { outline: 2px dotted var(--blue); outline-offset: 2px; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 6px 16px; background: linear-gradient(var(--surface), var(--shell)); border-bottom: 2px solid var(--edge);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .12);
+}
+.brand { font-size: 24px; line-height: 28px; letter-spacing: 1px; color: var(--steel); text-shadow: 2px 2px 0 var(--shell-dark); }
+.version { font-size: 12px; letter-spacing: 0; color: var(--soft); text-shadow: none; }
+.chip { display: flex; align-items: center; gap: 6px; padding: 2px 8px; background: var(--surface); border: 2px solid var(--edge); }
+.dot { width: 10px; height: 10px; background: var(--red); box-shadow: inset -2px -2px 0 rgba(0, 0, 0, .25); }
+.dot.on { background: var(--green); }
+.meters { display: flex; gap: 12px; flex-wrap: wrap; }
+.meter { display: flex; align-items: center; gap: 5px; }
+.meter i { display: block; width: 60px; height: 10px; background: var(--surface); border: 2px solid var(--edge); }
+.meter b { display: block; height: 100%; width: 0; background: var(--blue); transition: width .5s; }
+#cpuBar { background: var(--steel); }
+#ramBar { background: var(--steel-light); }
+.spacer { flex: 1; }
+
+main { display: flex; gap: 20px; justify-content: center; align-items: flex-start; padding: 0 16px 16px; }
+.stage { display: flex; flex-direction: column; align-items: center; flex: none; }
+
+/* A plain shadow: a blurred filter on the shell is costly when Chrome renders in software. */
+/* fitPreview() sets the width, to a whole number of device pixels per DS pixel. */
+.console { position: relative; flex: none; width: 552px; aspect-ratio: var(--shell-ratio); border-radius: 3.44% / 3.3%; box-shadow: 0 5px 0 rgba(0, 0, 0, .18); }
+.shell-art { height: 100%; pointer-events: none; }
+/* The preview opens the editor when a screen is clicked. The editor shows just the screens. */
+html:not(.editing) #overlay { pointer-events: none; }
+html:not(.editing) .screens:hover { outline: 2px solid var(--blue); outline-offset: 2px; }
+.editing .console { border-radius: 0; box-shadow: none; }
+.editing .shell-art { display: none; }
+.editing .screens { background: #111; box-shadow: 0 0 0 4px #111, 0 0 0 7px var(--edge), 5px 5px 0 7px rgba(0, 0, 0, .18); }
+.done { position: absolute; left: calc(100% + 18px); top: -7px; }
+html:not(.editing) .done { display: none; }
+.editing .dock { margin-top: 14px; }
+.shell-art svg { display: block; width: 100%; height: 100%; }
+/* The shell's buttons. Shadows stay put, so the tops look pushed in. */
+.press { pointer-events: auto; cursor: var(--stylus); }
+/* No transition or filter: either would add compositor layers mid-press and shift the screens' pixels. */
+.press.down > .button, .press.down > .rim, .press.down > .heavy, .press.down > .dpad, .press.down > .mark,
+.press.down > .flat-button, .press.down > .power, .press.down > .power-line {
+  transform: translate(var(--press-x, 0), var(--press-y, 1px)); opacity: .82;
+}
+.effects { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 70; pointer-events: none; }
+
+/* Covers both screens and the hinge. Each .lcd is a window on the same 256x384 content. */
+.screens { position: absolute; isolation: isolate; left: var(--lcd-left); top: var(--lcd-top); width: var(--lcd-width); aspect-ratio: 256 / calc(384 + var(--hinge)); overflow: hidden; touch-action: none; }
+.lcd { position: absolute; left: 0; width: 100%; height: calc(192 / (384 + var(--hinge)) * 100%); overflow: hidden; background: #000; }
+.lcd.top { top: 0; }
+.lcd.bottom { bottom: 0; border-radius: var(--lcd-radius, 0); }
+.lcd-content { position: absolute; left: 0; width: 100%; height: 200%; }
+.lcd.top .lcd-content { top: 0; }
+.lcd.bottom .lcd-content { bottom: 0; }
+.screens img { position: absolute; image-rendering: pixelated; pointer-events: none; }
+.lcd-frame { inset: 0; width: 100%; height: 100%; }
+#overlay { position: absolute; inset: 0; }
+.guide { position: absolute; z-index: 3; pointer-events: none; background: #ff2fa0; }
+.guide.x { top: 0; bottom: 0; width: 1px; }
+.guide.y { left: 0; right: 0; height: 1px; }
+.anim-view { position: absolute; overflow: hidden; pointer-events: none; }
+
+.box { position: absolute; cursor: var(--stylus); }
+.box:hover { box-shadow: 0 0 0 1px rgba(0, 65, 195, .7), 0 0 8px rgba(0, 65, 195, .45); }
+.box.locked { pointer-events: none; }
+.box.selected {
+  z-index: 2000;
+  background:
+    repeating-linear-gradient(90deg, var(--blue) 0 4px, #fff 4px 8px) top / 200% 2px no-repeat,
+    repeating-linear-gradient(90deg, var(--blue) 0 4px, #fff 4px 8px) bottom / 200% 2px no-repeat,
+    repeating-linear-gradient(0deg, var(--blue) 0 4px, #fff 4px 8px) left / 2px 200% no-repeat,
+    repeating-linear-gradient(0deg, var(--blue) 0 4px, #fff 4px 8px) right / 2px 200% no-repeat;
+}
+.handle { position: absolute; width: 10px; height: 10px; background: #fff; border: 2px solid var(--blue); box-shadow: 1px 1px 0 rgba(0, 0, 0, .4); }
+.handle.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+
+/* The page's 48px grid cells, just below the DS. fitPreview() anchors the grid here, and each
+   tile is 2px in from its cell's grid lines, with its name in the cell beside it. */
+.dock { display: flex; flex-wrap: wrap; justify-content: center; max-width: 672px; margin-top: 6px; }
+/* The settings screen's tiles. Their names show as tooltips, as the real ones have no text. */
+.tile, .tile:hover:not(:disabled), .tile:active:not(:disabled) { border: 0; border-image: none; transform: none; filter: none; box-shadow: none; }
+.tile { position: relative; flex: none; display: block; width: 45px; height: 45px; margin: 2px 1px 1px 2px; padding: 0; background: none; }
+.tile:hover:not(:disabled)::after, .tile[aria-expanded="true"]::after, .tile:focus-visible::after {
+  content: ""; position: absolute; left: -2px; top: -2px; width: 49px; height: 49px; background: url("/art/ui/tools/selected.png"); pointer-events: none;
+}
+.tile:disabled { opacity: .45; cursor: var(--stylus); }
+.tile input { position: absolute; inset: 0; opacity: 0; cursor: var(--stylus); }
+.icon { display: block; width: 45px; height: 45px; background: center no-repeat; }
+.dock .tile { display: flex; align-items: center; width: 93px; text-align: left; }
+.dock .icon { flex: none; }
+.tool-label { padding-left: 9px; color: var(--ink); }
+.icon.undo { background-image: url("/art/ui/tools/undo.png"); }
+.icon.redo { background-image: url("/art/ui/tools/redo.png"); }
+.icon.add { background-image: url("/art/ui/tools/add.png"); }
+.icon.layers { background-image: url("/art/ui/tools/layers.png"); }
+.icon.code-icon { background-image: url("/art/ui/tools/code.png"); }
+.icon.upload { background-image: url("/art/ui/tools/upload.png"); }
+.icon.reset { background-image: url("/art/ui/tools/reset.png"); }
+
+/* Layers and JSON: a drawer down the right, from the top bar to the bottom. The DS centres in what's left. */
+:root { --drawer: 380px; }
+:root:has(.drawer.wide) { --drawer: 460px; }
+main:has(.drawer:not([hidden])) { padding-right: calc(var(--drawer) + 16px); }
+.drawer {
+  position: fixed; right: 0; top: var(--bar, 46px); bottom: 0; z-index: 25; width: min(var(--drawer), 100vw);
+  display: flex; flex-direction: column; padding: 10px 12px 12px;
+  background: var(--surface); border-left: 2px solid var(--edge); box-shadow: -4px 0 0 rgba(0, 0, 0, .14);
+}
+.pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tabs { position: relative; display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 2px solid var(--line); }
+.tabs button { flex: 1; padding: 4px 0; border: 0; background: none; cursor: var(--stylus); color: var(--soft); }
+.tabs button[aria-selected="true"] { color: var(--steel); }
+.tab-mark { position: absolute; left: 0; bottom: -2px; width: 50%; height: 2px; background: var(--steel); }
+
+#list { flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 8px; }
+.item { --indent: calc(var(--depth, 0) * 14px); display: flex; align-items: center; gap: 4px; padding: 2px 6px 2px calc(4px + var(--indent)); cursor: var(--stylus); border-bottom: 1px dotted var(--line); transition: background .12s, padding-left .12s; }
+.item:hover { background: var(--hover); padding-left: calc(8px + var(--indent)); }
+.item.top:not(.selected) { background: var(--shell); color: var(--steel); border-top: 1px solid var(--edge); }
+.item.top:not(.selected):hover { background: var(--hover); }
+.twisty { flex: none; width: 14px; height: 14px; padding: 0; border: 1px solid var(--edge); background: var(--surface); color: var(--ink); line-height: 11px; text-align: center; cursor: var(--stylus); }
+span.twisty { border: 0; background: none; }
+.item.selected { background: var(--blue); color: #fff; }
+.item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .type { opacity: .65; }
+.item.hidden .name { text-decoration: line-through; opacity: .6; }
+.row { display: flex; gap: 6px; align-items: center; }
+.row.center { justify-content: center; }
+
+.code { position: relative; flex: 1; min-height: 120px; border: 2px solid var(--edge); overflow: hidden; background: var(--surface); }
+.code pre, .code textarea { position: absolute; inset: 0; margin: 0; padding: 6px; border: 0; width: 100%; height: 100%; font: 12px/18px "Fusion Pixel", monospace; white-space: pre; tab-size: 2; }
+.code pre { overflow: hidden; pointer-events: none; }
+.code textarea { overflow: auto; resize: none; background: transparent; color: transparent; caret-color: var(--ink); outline: none; }
+.code .line { display: block; min-height: 18px; margin: 0 -6px; padding: 0 6px; }
+.code .line.active { background: var(--line-active); }
+.code .line.bad { background: var(--line-bad); }
+.tok-key { color: var(--blue); }
+.tok-string { color: var(--tok-string); }
+.tok-number { color: var(--tok-number); }
+.tok-bool { color: var(--tok-bool); }
+.tok-token { color: var(--tok-token); }
+.swatch { display: inline-block; width: 9px; height: 9px; margin-right: 3px; border: 1px solid #555; vertical-align: -1px; }
+.hint { color: var(--soft); margin: 6px 0; }
+.error-text { color: var(--red); margin: 0 0 6px; }
+.error-text:empty { display: none; }
+
+/* The menu's speech bubble, as a popout. */
+.bubble {
+  position: fixed; left: 0; top: 0; z-index: 40; width: 292px; padding: 10px 12px; background: var(--surface);
+  border: 3px solid var(--edge); border-radius: 6px; box-shadow: 4px 4px 0 rgba(0, 0, 0, .18);
+}
+#addMenu { width: 336px; }
+#brightnessMenu { width: 240px; }
+.bubble-scroll { max-height: calc(100vh - 110px); overflow: hidden auto; margin-right: -6px; padding-right: 6px; }
+.tail { position: absolute; width: 12px; height: 12px; background: var(--surface); border: 3px solid var(--edge); border-width: 0 0 3px 3px; transform: rotate(45deg); }
+.bubble-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.bubble-head h2 { margin: 0; font: inherit; color: var(--steel); }
+.close { width: 22px; height: 22px; padding: 0; background: var(--surface); border: 2px solid var(--edge); cursor: var(--stylus); line-height: 16px; }
+.close:hover { color: #fff; background: var(--red); border-color: var(--red); }
+
+.field { display: block; margin-bottom: 8px; color: var(--soft); }
+label, .field, .switch, select, input[type=color], input[type=range], input[type=file] { cursor: var(--stylus); }
+.swatches { display: grid; grid-template-columns: repeat(4, 32px); gap: 6px; margin-bottom: 8px; }
+.shell-swatch { width: 32px; height: 32px; padding: 0; border: 2px solid var(--edge); box-shadow: inset 0 0 0 2px #fff; cursor: var(--stylus); }
+.shell-swatch[aria-pressed="true"] { border-color: var(--blue); }
+.ds-button[aria-pressed="true"] { color: var(--blue); }
+.swatches.bars { grid-template-columns: repeat(8, 28px); }
+.swatches.bars .shell-swatch { width: 28px; height: 22px; background-size: cover; image-rendering: pixelated; font: inherit; color: var(--ink); }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.field input[type=number], .field input[type=text], .field select {
+  display: block; width: 100%; height: 26px; padding: 0 5px; margin-top: 1px; color: var(--ink); background: var(--surface); border: 2px solid var(--edge); border-radius: 0; transition: box-shadow .1s;
+}
+.field select { appearance: none; padding-right: 20px; background: var(--surface) url("/web/arrow.svg") right 5px center no-repeat; }
+.field input:focus, .field select:focus { outline: none; border-color: var(--blue); box-shadow: 2px 2px 0 var(--focus); }
+.field input[type=color] { display: block; width: 100%; height: 26px; padding: 0; border: 2px solid var(--edge); background: var(--surface); cursor: var(--stylus); }
+input[type=range] { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 12px; margin-top: 8px; background: var(--line); border: 2px solid var(--edge); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 22px; background: var(--blue); border: 2px solid #fff; box-shadow: 0 0 0 2px var(--edge); cursor: var(--stylus); }
+
+.switch { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; cursor: var(--stylus); color: var(--soft); }
+.switch input { position: absolute; opacity: 0; }
+.switch i { position: relative; width: 40px; height: 20px; background: var(--line); border: 2px solid var(--edge); transition: background .15s; }
+.switch i::after { content: ""; position: absolute; left: 1px; top: 1px; width: 14px; height: 14px; background: #fff; box-shadow: 1px 1px 0 var(--edge); transition: left .15s cubic-bezier(.3, 1.6, .5, 1); }
+.switch input:checked + i { background: var(--blue); }
+.switch input:checked + i::after { left: 21px; }
+.switch input:focus-visible + i { outline: 2px dotted var(--blue); outline-offset: 2px; }
+
+.tokens { display: flex; flex-wrap: wrap; gap: 3px; margin: -3px 0 8px; }
+.tokens button { padding: 0 4px; background: var(--hover); border: 1px solid var(--blue); color: var(--blue); cursor: var(--stylus); }
+.tokens button:hover { color: #fff; background: var(--blue); }
+
+.cropper { position: relative; margin-bottom: 6px; overflow: hidden; background: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 16px 16px; touch-action: none; user-select: none; }
+.cropper img { display: block; width: 100%; image-rendering: pixelated; pointer-events: none; }
+.crop-area { position: absolute; cursor: var(--stylus); outline: 2px dashed #fff; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .55); }
+.crop-handle { position: absolute; width: 10px; height: 10px; background: #fff; border: 2px solid var(--blue); }
+.crop-handle.nw { left: 0; top: 0; cursor: nwse-resize; }
+.crop-handle.ne { right: 0; top: 0; cursor: nesw-resize; }
+.crop-handle.sw { left: 0; bottom: 0; cursor: nesw-resize; }
+.crop-handle.se { right: 0; bottom: 0; cursor: nwse-resize; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.chips button { padding: 0 6px; min-height: 22px; background: var(--surface); border: 2px solid var(--edge); cursor: var(--stylus); }
+.chips button:hover { color: #fff; background: var(--blue); border-color: var(--blue); }
+
+.add-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.add-grid button { width: 100%; min-height: 40px; }
+
+/* The real dialog box from the menu. */
+.dialog, .toast {
+  color: #fff; background: #141414; border: 4px solid #e8820c; outline: 2px solid #111; box-shadow: inset 0 0 0 2px #5a3a10, 0 6px 14px rgba(0, 0, 0, .35);
+  background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, .05) 0 1px, transparent 1px 2px);
+}
+.modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(40, 40, 50, .45); }
+.dialog { width: min(380px, 90vw); padding: 20px 16px; text-align: center; }
+.dialog p { margin: 0 0 16px; font-size: 14px; }
+.dialog-button { min-width: 96px; padding: 4px 10px; color: #fff; background: #2c2c2c; border: 2px solid #e8820c; cursor: var(--stylus); }
+.dialog-button:hover, .dialog-button:focus-visible { background: #e8820c; color: #000; }
+#toasts { position: fixed; left: 50%; bottom: 18px; z-index: 50; display: flex; flex-direction: column; align-items: center; gap: 6px; transform: translateX(-50%); pointer-events: none; }
+.toast { padding: 6px 14px; }
+.toast.error { border-color: var(--red); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

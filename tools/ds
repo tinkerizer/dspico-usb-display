@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Runs dsctl.py under Windows Python, which owns the USB device, from WSL.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python.exe "$(wslpath -w "$here/dsctl.py")" "$@"

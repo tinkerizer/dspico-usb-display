@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shell Lab</title>
+<link rel="icon" href="data:,">
+<style>
+:root { --bg: #1d1f22; --panel: #2a2d31; --line: #3b3f45; --text: #e6e6e6; --muted: #9aa0a6; --accent: #4da3ff; }
+* { box-sizing: border-box; }
+body { margin: 0; height: 100vh; display: grid; grid-template-columns: 290px 1fr; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
+aside { background: var(--panel); border-right: 1px solid var(--line); padding: 12px; overflow-y: auto; }
+h1 { font-size: 15px; margin: 0 0 10px; }
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; }
+label { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+label > span { width: 74px; color: var(--muted); flex: none; }
+input[type=range] { flex: 1; min-width: 0; }
+select, button, input[type=number] { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; font: inherit; }
+input[type=number] { width: 70px; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; }
+.readout { font: 12px/1.5 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; white-space: pre-wrap; word-break: break-all; min-height: 2.6em; }
+.hint { color: var(--muted); font-size: 12px; }
+main { overflow: auto; position: relative; }
+#stage { position: relative; margin: 24px; transform-origin: 0 0; }
+#shell svg { display: block; width: 100%; height: auto; }
+#shell svg * { cursor: crosshair; }
+#ref { position: absolute; left: 0; top: 0; pointer-events: none; transform-origin: 0 0; max-width: none; }
+#grid { position: absolute; inset: 0; pointer-events: none; display: none;
+  background-image: linear-gradient(to right, rgba(255,0,255,.25) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,0,255,.25) 1px, transparent 1px); }
+.picked { outline: 1px dashed var(--accent); }
+#toast { position: fixed; right: 16px; bottom: 16px; background: var(--accent); color: #000; padding: 6px 10px; border-radius: 4px; opacity: 0; transition: opacity .3s; }
+#toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Shell Lab</h1>
+  <p class="hint">Edit <code>app/dsdash/web/shell.svg</code> or <code>shell-dsi.svg</code> and save. This page redraws by itself.</p>
+
+  <h2>Shell</h2>
+  <label><span>Model</span><select id="model"><option value="lite">DS Lite</option><option value="dsi">DSi</option></select></label>
+  <label><span>Colour</span><input id="color" type="color" value="#3d3d3d"></label>
+  <label><span>Labels</span><input id="label" type="color" value="#e8e8e8"></label>
+  <label><span>Zoom</span><input id="zoom" type="range" min="1" max="8" step="1" value="2"><b id="zoomValue">2x</b></label>
+  <label><span>Pixel grid</span><input id="grid-on" type="checkbox"></label>
+
+  <h2>Cursor (DS pixels)</h2>
+  <div class="readout" id="pos">Move over the shell</div>
+
+  <h2>Element under cursor</h2>
+  <div class="readout" id="element">Click an element to keep it here</div>
+
+  <h2>Reference</h2>
+  <label><span>Image</span><select id="ref-file"><option value="">None</option></select></label>
+  <label><span>Opacity</span><input id="ref-opacity" type="range" min="0" max="1" step=".05" value=".5"></label>
+  <label><span>Blend</span><select id="ref-blend"><option value="normal">Normal</option><option value="difference">Difference</option></select></label>
+  <label><span>Scale</span><input id="ref-scale" type="number" step=".005" value="1"></label>
+  <label><span>X / Y</span><input id="ref-x" type="number" step=".5" value="0"><input id="ref-y" type="number" step=".5" value="0"></label>
+  <div class="row"><button id="ref-fit">Fit to width</button><button id="ref-flick">Hold to compare</button></div>
+  <p class="hint">Shift-drag moves the image, Shift-wheel scales it, and each image keeps its own place. Add images to <code>tools/shell-lab/refs/</code>.</p>
+</aside>
+<main>
+  <div id="stage">
+    <div id="shell"></div>
+    <img id="ref" alt="">
+    <div id="grid"></div>
+  </div>
+</main>
+<div id="toast">Reloaded</div>
+<script>
+const $ = id => document.getElementById(id);
+const stage = $("stage"), shellBox = $("shell"), ref = $("ref");
+let svg = null, mtimes = {}, picked = null, base = { w: 552, h: 575 };
+
+function store(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
+
+function applyView() {
+  const zoom = +$("zoom").value;
+  $("zoomValue").textContent = `${zoom}x`;
+  stage.style.width = `${base.w * zoom}px`;
+  stage.style.height = `${base.h * zoom}px`;
+  $("grid").style.display = $("grid-on").checked && zoom >= 4 ? "block" : "none";
+  $("grid").style.backgroundSize = `${zoom}px ${zoom}px`;
+  if (svg) {
+    svg.style.setProperty("--ds-color", $("color").value);
+    svg.style.setProperty("--ds-label", $("label").value);
+  }
+  applyRef();
+  store("view", { model: $("model").value, color: $("color").value, label: $("label").value, zoom, grid: $("grid-on").checked });
+}
+
+async function loadShell(toast) {
+  const text = await (await fetch(`/shell/${$("model").value}`)).text();
+  shellBox.innerHTML = text;
+  svg = shellBox.querySelector("svg");
+  const box = svg.viewBox.baseVal;
+  base = { w: box.width, h: box.height };
+  picked = null;
+  applyView();
+  if (toast) { $("toast").classList.add("on"); setTimeout(() => $("toast").classList.remove("on"), 700); }
+}
+
+// Pointer position in the SVG's own units, which are DS pixels.
+function svgPoint(event) {
+  const point = svg.createSVGPoint();
+  point.x = event.clientX; point.y = event.clientY;
+  return point.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function describe(node) {
+  if (!node || node === svg) return "";
+  const attrs = [...node.attributes].filter(a => a.name !== "d" || a.value.length < 80)
+    .map(a => `${a.name}="${a.value}"`).join(" ");
+  const box = node.getBBox ? node.getBBox() : null;
+  const size = box ? `\nbox x ${box.x.toFixed(1)} y ${box.y.toFixed(1)} w ${box.width.toFixed(1)} h ${box.height.toFixed(1)}` : "";
+  const group = node.parentNode && node.parentNode.tagName === "g" ? `\nin <g ${[...node.parentNode.attributes].map(a => `${a.name}="${a.value}"`).join(" ")}>` : "";
+  return `<${node.tagName} ${attrs}>${size}${group}`;
+}
+
+shellBox.addEventListener("pointermove", event => {
+  if (!svg) return;
+  const p = svgPoint(event);
+  $("pos").textContent = `x ${p.x.toFixed(1)}  y ${p.y.toFixed(1)}`;
+  if (!picked) $("element").textContent = describe(event.target);
+});
+shellBox.addEventListener("click", event => {
+  if (picked) picked.classList.remove("picked");
+  picked = event.target === svg || event.target === picked ? null : event.target;
+  if (picked) { picked.classList.add("picked"); $("element").textContent = describe(picked); }
+});
+
+// Reference image: position and scale are kept per image.
+function refKey() { return `ref:${$("ref-file").value}`; }
+function applyRef() {
+  const zoom = +$("zoom").value;
+  const s = +$("ref-scale").value, x = +$("ref-x").value, y = +$("ref-y").value;
+  ref.style.display = $("ref-file").value ? "block" : "none";
+  ref.style.opacity = $("ref-opacity").value;
+  ref.style.mixBlendMode = $("ref-blend").value;
+  ref.style.transform = `translate(${x * zoom}px, ${y * zoom}px) scale(${s * zoom})`;
+  if ($("ref-file").value) store(refKey(), { s, x, y });
+}
+async function showRef() {
+  const name = $("ref-file").value;
+  store("refFile", name);
+  if (!name) { applyRef(); return; }
+  let saved = load(refKey(), null);
+  if (!saved) {
+    // refs/<image name>.json can give a starting alignment.
+    try { const r = await fetch(`/refs/${encodeURIComponent(name)}.json`); if (r.ok) saved = await r.json(); } catch {}
+  }
+  ref.onload = () => { if (!saved) fitRef(); else applyRef(); };
+  if (saved) { $("ref-scale").value = saved.s; $("ref-x").value = saved.x; $("ref-y").value = saved.y; }
+  ref.src = `/refs/${encodeURIComponent(name)}`;
+}
+function fitRef() {
+  if (!ref.naturalWidth) return;
+  $("ref-scale").value = (base.w / ref.naturalWidth).toFixed(4);
+  $("ref-x").value = 0; $("ref-y").value = 0;
+  applyRef();
+}
+
+let drag = null;
+stage.addEventListener("pointerdown", event => {
+  if (!event.shiftKey || !$("ref-file").value) return;
+  event.preventDefault();
+  drag = { x: event.clientX, y: event.clientY, rx: +$("ref-x").value, ry: +$("ref-y").value };
+  stage.setPointerCapture(event.pointerId);
+});
+stage.addEventListener("pointermove", event => {
+  if (!drag) return;
+  const zoom = +$("zoom").value;
+  $("ref-x").value = (drag.rx + (event.clientX - drag.x) / zoom).toFixed(1);
+  $("ref-y").value = (drag.ry + (event.clientY - drag.y) / zoom).toFixed(1);
+  applyRef();
+});
+stage.addEventListener("pointerup", () => { drag = null; });
+stage.addEventListener("wheel", event => {
+  if (!event.shiftKey || !$("ref-file").value) return;
+  event.preventDefault();
+  const step = (event.deltaY || event.deltaX) > 0 ? 0.995 : 1.005;
+  $("ref-scale").value = (+$("ref-scale").value * step).toFixed(4);
+  applyRef();
+}, { passive: false });
+
+const flick = $("ref-flick");
+flick.addEventListener("pointerdown", () => { ref.dataset.opacity = $("ref-opacity").value; ref.style.opacity = 1; shellBox.style.visibility = "hidden"; });
+for (const type of ["pointerup", "pointerleave"]) {
+  flick.addEventListener(type, () => { if (ref.dataset.opacity) { ref.style.opacity = ref.dataset.opacity; delete ref.dataset.opacity; } shellBox.style.visibility = ""; });
+}
+
+async function poll() {
+  try {
+    const state = await (await fetch("/api/state")).json();
+    const select = $("ref-file");
+    const known = [...select.options].map(o => o.value).slice(1);
+    if (known.join() !== state.refs.join()) {
+      const current = select.value || load("refFile", "");
+      select.replaceChildren(new Option("None", ""), ...state.refs.map(name => new Option(name, name)));
+      if (state.refs.includes(current)) { select.value = current; showRef(); }
+    }
+    const model = $("model").value;
+    if (mtimes[model] !== undefined && mtimes[model] !== state.shells[model]) await loadShell(true);
+    mtimes = state.shells;
+  } catch {
+    // Server stopped. Keep trying.
+  }
+  setTimeout(poll, 500);
+}
+
+const view = load("view", {});
+if (view.model) $("model").value = view.model;
+if (view.color) $("color").value = view.color;
+if (view.label) $("label").value = view.label;
+if (view.zoom) $("zoom").value = view.zoom;
+$("grid-on").checked = !!view.grid;
+
+$("model").addEventListener("change", () => loadShell(false));
+for (const id of ["color", "label", "zoom", "grid-on"]) $(id).addEventListener("input", applyView);
+for (const id of ["ref-opacity", "ref-blend", "ref-scale", "ref-x", "ref-y"]) $(id).addEventListener("input", applyRef);
+$("ref-file").addEventListener("change", showRef);
+$("ref-fit").addEventListener("click", fitRef);
+
+loadShell(false).then(poll);
+</script>
+</body>
+</html>

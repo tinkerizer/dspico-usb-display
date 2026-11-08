@@ -1,0 +1,163 @@
+{
+  "type": "top_bar",
+  "label": "Top bar",
+  "size": [
+    256,
+    16
+  ],
+  "props": [
+    {
+      "key": "colour",
+      "label": "Bar colour",
+      "kind": "swatch",
+      "default": "theme",
+      "theme": "bar",
+      "options": [
+        "theme",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15"
+      ],
+      "preview": "art:topbar/{value}.png"
+    },
+    {
+      "key": "name",
+      "label": "Name",
+      "kind": "text",
+      "default": "{host}"
+    },
+    {
+      "key": "text_colour",
+      "label": "Text colour",
+      "kind": "color",
+      "default": "#ffffff"
+    },
+    {
+      "key": "show_time",
+      "label": "Show time",
+      "kind": "select",
+      "options": [
+        "yes",
+        "no"
+      ],
+      "default": "yes"
+    },
+    {
+      "key": "show_date",
+      "label": "Show date",
+      "kind": "select",
+      "options": [
+        "yes",
+        "no"
+      ],
+      "default": "yes"
+    },
+    {
+      "key": "show_usb",
+      "label": "Show USB",
+      "kind": "select",
+      "options": [
+        "yes",
+        "no"
+      ],
+      "default": "yes"
+    },
+    {
+      "key": "show_battery",
+      "label": "Show battery",
+      "kind": "select",
+      "options": [
+        "yes",
+        "no"
+      ],
+      "default": "yes"
+    }
+  ],
+  "children": [
+    {
+      "id": "bar",
+      "type": "image",
+      "x": 0,
+      "y": 0,
+      "w": 256,
+      "h": 16,
+      "props": {
+        "file": "art:topbar/{colour}.png"
+      }
+    },
+    {
+      "id": "name",
+      "type": "text",
+      "x": 3,
+      "y": 2,
+      "w": 138,
+      "h": 12,
+      "props": {
+        "text": "{name}",
+        "color": "{text_colour}"
+      }
+    },
+    {
+      "id": "time",
+      "type": "text",
+      "x": 144,
+      "y": 2,
+      "w": 30,
+      "h": 12,
+      "if": "show_time",
+      "props": {
+        "text": "{time}",
+        "color": "{text_colour}",
+        "align": "center"
+      }
+    },
+    {
+      "id": "date",
+      "type": "text",
+      "x": 176,
+      "y": 2,
+      "w": 30,
+      "h": 12,
+      "if": "show_date",
+      "props": {
+        "text": "{date}",
+        "color": "{text_colour}",
+        "align": "center"
+      }
+    },
+    {
+      "id": "usb",
+      "type": "usb",
+      "x": 225,
+      "y": 4,
+      "w": 12,
+      "h": 7,
+      "if": "show_usb"
+    },
+    {
+      "id": "battery",
+      "type": "image",
+      "x": 242,
+      "y": 4,
+      "w": 12,
+      "h": 7,
+      "if": "show_battery",
+      "props": {
+        "file": "art:battery/batteryfullDS.png"
+      }
+    }
+  ]
+}

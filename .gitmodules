@@ -1,0 +1,15 @@
+[submodule "libs/tinyusb"]
+	path = libs/tinyusb
+	url = https://github.com/hathach/tinyusb.git
+[submodule "libs/libtwl"]
+	path = libs/libtwl
+	url = https://github.com/Gericom/libtwl
+[submodule "dspico/firmware"]
+	path = dspico/firmware
+	url = https://github.com/LNH-team/dspico-firmware.git
+[submodule "dspico/pico-loader"]
+	path = dspico/pico-loader
+	url = https://github.com/LNH-team/pico-loader.git
+[submodule "dspico/pico-launcher"]
+	path = dspico/pico-launcher
+	url = https://github.com/LNH-team/pico-launcher.git

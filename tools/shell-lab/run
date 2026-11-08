@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Starts the shell lab under Windows Python, so it opens in the Windows browser.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python.exe "$(wslpath -w "$here/server.py")" "$@"
