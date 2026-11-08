@@ -271,3 +271,15 @@ class ThemeLayoutTests(BrowserCase):
         page.evaluate("changeDsTheme({ action: 'use', name: 'Mine' })")
         self.assertEqual(page.evaluate("layout.elements.length"), count - 1, "The edit before switching was lost")
         page.evaluate("changeDsTheme({ action: 'use', name: 'Classic' })")
+
+    def test_the_sleep_screen_is_set_from_the_theme_menu(self):
+        page = self.open()
+        page.click("#dsThemeButton")
+        page.wait_for_selector("#sleepFile option[value='art:sleep/sleepy_cat.gif']", state="attached")
+        self.assertEqual(page.input_value("#sleepFile"), "art:sleep/sleepy_cat.gif")
+        page.select_option("#sleepScreen", "bottom")
+        page.wait_for_function("async () => (await api('/api/themes')).sleep.screen === 'bottom'")
+        self.addCleanup(page.evaluate, "changeDsTheme({ action: 'sleep', sleep: { file: 'art:sleep/sleepy_cat.gif', screen: 'top', brightness: 30 } })")
+        page.select_option("#sleepFile", "")
+        page.wait_for_function("async () => (await api('/api/themes')).sleep.file === ''")
+        self.assertTrue(page.is_disabled("#sleepScreen"))

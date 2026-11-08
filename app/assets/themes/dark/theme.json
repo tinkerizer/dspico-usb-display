@@ -5,6 +5,11 @@
   "boost": 35,
   "lift": 35,
   "bar": 11,
+  "sleep": {
+    "file": "art:sleep/sleepy_cat.gif",
+    "screen": "top",
+    "brightness": 30
+  },
   "layout": {
     "version": 1,
     "elements": [

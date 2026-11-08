@@ -16,8 +16,9 @@ files: the same image in two themes is two copies.
 
 ```
 classic/
-  theme.json        name, colours and layout
+  theme.json        name, colours, sleep screen and layout
   uploads/          images and GIFs added in the editor
+  sleep/            the sleep screen's GIF
   background/       menu backgrounds
   battery/  grf/  quickmenu/  topbar/  ui/  volume/
   sound/            the editor's sounds
@@ -25,6 +26,7 @@ classic/
 
 ```json
 {"name": "Classic", "paper": "#ffffff", "ink": "#000000", "boost": 0, "lift": 0, "bar": 11,
+ "sleep": {"file": "art:sleep/sleepy_cat.gif", "screen": "top", "brightness": 30},
  "layout": {"version": 1, "elements": [...]}}
 ```
 
@@ -35,7 +37,21 @@ classic/
 | `boost` | 0 to 100: how much brighter colours get |
 | `lift` | 0 to 60: how dark a grey has to be to become full ink |
 | `bar` | 0 to 15: the top bar's colour, one of the DS profile colours |
+| `sleep` | What the DS shows while the PC sleeps, below |
 | `layout` | The elements, as the editor's JSON tab shows them |
+
+### Sleep screen
+
+When the app stops sending, as when the PC sleeps, the DS waits 5 seconds and then shows the sleep
+screen: black, with the theme's sleep GIF playing at its own brightness. It's set in the **DS
+theme** menu, under **When the PC sleeps**, and saved as you change it.
+
+- `file`: a GIF in the theme's folder, or `""` for just black. The GIF is cropped to what's drawn
+  in it, ignoring its background colour, shrunk if it's bigger than a screen, and centred.
+- `screen`: `top` or `bottom`.
+- `brightness`: 0 to 100.
+
+When the PC is back, the dashboard returns as it was.
 
 The app loads themes from two folders when it starts:
 

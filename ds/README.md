@@ -52,6 +52,13 @@ animations.
 GIFs are uploaded once and play on the DS with no USB traffic. The DS keeps its own copy of the
 live picture, and transparent animation pixels show it, so live values stay visible under a GIF.
 
+## Sleep screen
+
+The host sends a packet at least every second. After 5 seconds with none, such as while the PC
+sleeps, the DS blacks out the screens, pauses the host's animations, and plays the sleep animation
+in its own slot at a low brightness. The next packet brings back the live picture from the DS's
+copy, so the host doesn't need to resend it.
+
 ## Limitations
 
 - Display only: no touchscreen input back to the PC

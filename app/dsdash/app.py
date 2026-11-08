@@ -77,9 +77,11 @@ class App:
                 self.themes.save(name, request.get("theme") or {})
             elif action == "delete":
                 self.themes.delete(name)
+            elif action == "sleep":
+                self.themes.set_sleep(request.get("sleep"))
             else:
                 raise ValueError("Unknown theme action")
-            if action != "preview":
+            if action not in ("preview", "sleep"):
                 # Each theme has its own layout, so the editor reloads it.
                 self.layout = self.themes.layout
                 self.revision += 1
@@ -95,7 +97,8 @@ class App:
         theme = self.themes.active
         themed = themes.apply_layout(self.layout, theme)
         elements = [e for e in themed["elements"] if e["type"] == "animation" and not e["hidden"]]
-        key = repr((elements, layouts.ART_DIR))     # A GIF from art: comes from the theme's folder
+        sleep = self.themes.sleep
+        key = repr((elements, sleep, layouts.ART_DIR))     # A GIF from art: comes from the theme's folder
         if key == self._animation_key:
             return
         self._animation_key = key
@@ -111,8 +114,15 @@ class App:
                 animations.append(Animation(area, frames))
             except (OSError, ValueError, struct.error) as error:
                 log.warning("Skipping animation %s: %s", element["id"], error)
+        sleep_animation = None
+        if sleep["file"]:
+            try:
+                area, frames = codec.encode_sleep(str(layouts.resolve_file(sleep["file"])), sleep["screen"])
+                sleep_animation = Animation(area, frames)
+            except (OSError, ValueError, struct.error) as error:
+                log.warning("Skipping the sleep screen: %s", error)
         log.info("Animations: %d, %d bytes", len(animations), sum(a.size for a in animations))
-        self.device.set_animations(animations)
+        self.device.set_animations(animations, sleep_animation, sleep["brightness"])
 
     def save_upload(self, name: str, data: bytes) -> str:
         """Stores an uploaded image, checking that it decodes before keeping it."""

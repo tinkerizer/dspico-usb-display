@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 MAX_NAME = 24
 NEUTRAL = 24    # Pixels whose channels differ by less than this count as grey.
 DEFAULT = "Classic"
+SLEEP_DEFAULT = {"file": "", "screen": "top", "brightness": 30}
 
 # The DS profile colours, as in the menu's own table. Index matches art:topbar/N.png.
 PROFILE_555 = (0xCE0C, 0x8137, 0x8C1F, 0xFE3F, 0x825F, 0x839E, 0x83F5, 0x83E0,
@@ -113,12 +114,34 @@ def read_layout(folder: Path) -> dict:
     return layouts.from_saved(read_file(folder).get("layout"))
 
 
-def write(folder: Path, name: str, theme: dict, layout: dict):
-    """Writes through a temporary file, so a crash can't leave half a theme."""
+def write(folder: Path, **changes):
+    """Changes some of a theme's fields, keeping the rest. Writes through a temporary file, so a crash
+    can't leave half a theme."""
     folder.mkdir(parents=True, exist_ok=True)
+    try:
+        info = read_file(folder)
+    except (OSError, ValueError):
+        info = {}
+    info.update(changes)
     temporary = folder / "theme.json.tmp"
-    temporary.write_text(json.dumps({"name": name, **clean(theme), "layout": layout}, indent=2), encoding="utf-8")
+    temporary.write_text(json.dumps(info, indent=2), encoding="utf-8")
     os.replace(temporary, folder / "theme.json")
+
+
+def clean_sleep(sleep) -> dict:
+    """The sleep screen: a GIF from the theme's folder, or "" for black, its screen and its brightness."""
+    sleep = sleep if isinstance(sleep, dict) else {}
+    out = {**SLEEP_DEFAULT, **{key: sleep[key] for key in SLEEP_DEFAULT if key in sleep}}
+    if out["file"] and (not isinstance(out["file"], str) or not out["file"].lower().endswith(".gif")):
+        raise ValueError("The sleep screen needs a GIF")
+    if out["file"]:
+        layouts.resolve_file(out["file"])
+    if out["screen"] not in ("top", "bottom"):
+        raise ValueError("The sleep screen is top or bottom")
+    brightness = out["brightness"]
+    if not isinstance(brightness, int) or isinstance(brightness, bool) or not 0 <= brightness <= 100:
+        raise ValueError("Sleep brightness must be a whole number from 0 to 100")
+    return out
 
 
 def folder_name(name: str, taken) -> str:
@@ -160,6 +183,17 @@ class ThemeStore:
         user = load_folders(self.user_dir)
         self.custom = {name: folder for name, folder in user.items() if name not in self.built_in}
         self.edited = {name: folder for name, folder in user.items() if name in self.built_in}
+        for folder in user.values():
+            self._add_sleep_screen(folder)
+
+    def _add_sleep_screen(self, folder: Path):
+        """Themes made before sleep screens get Classic's."""
+        source = self.built_in.get(DEFAULT)
+        if source is None or "sleep" in read_file(folder):
+            return
+        if (source / "sleep").is_dir() and not (folder / "sleep").exists():
+            shutil.copytree(source / "sleep", folder / "sleep")
+        write(folder, sleep=read_file(source).get("sleep", SLEEP_DEFAULT))
 
     def _convert_old(self, saved):
         """Saved themes used to be colours only, in themes.json. Each becomes a folder with Classic's art."""
@@ -175,7 +209,7 @@ class ThemeStore:
             source = self.built_in[DEFAULT]
             folder = self.user_dir / folder_name(name, self._taken())
             shutil.copytree(source, folder, ignore=shutil.ignore_patterns("theme.json"))
-            write(folder, name, theme, read_file(source).get("layout"))
+            write(folder, name=name, **theme, layout=read_file(source).get("layout"))
 
     def _move_old_layout(self, data_dir: Path):
         """The layout and uploads used to be shared by every theme. They go to the active theme and the user's own."""
@@ -193,7 +227,7 @@ class ThemeStore:
             for path in uploads:
                 shutil.copy2(path, folder / "uploads" / path.name)
             info = read_file(folder)
-            write(folder, info["name"], info, layout)
+            write(folder, layout=layout)
         os.replace(old, old.with_name("layout.json.old"))
 
     def _taken(self):
@@ -231,14 +265,25 @@ class ThemeStore:
 
     def save_layout(self, layout: dict):
         folder = self._writable(self.active_name)
-        write(folder, self.active_name, read(folder), layout)
+        write(folder, layout=layout)
+
+    @property
+    def sleep(self) -> dict:
+        try:
+            return clean_sleep(read_file(self.folder).get("sleep"))
+        except ValueError:
+            return dict(SLEEP_DEFAULT)
+
+    def set_sleep(self, sleep: dict):
+        write(self._writable(self.active_name), sleep=clean_sleep(sleep))
 
     def uploads_dir(self) -> Path:
         return self._writable(self.active_name) / "uploads"
 
     def listing(self) -> dict:
         return {"active": self.active_name, "themes": self.all(), "builtIn": list(self.built_in),
-                "edited": list(self.edited), "colours": [profile_colour(i) for i in range(16)]}
+                "edited": list(self.edited), "colours": [profile_colour(i) for i in range(16)],
+                "sleep": self.sleep, "gifs": [file for file in layouts.list_files() if file.endswith(".gif")]}
 
     def _point_art(self):
         layouts.ART_DIR = self.folder
@@ -263,7 +308,7 @@ class ThemeStore:
             folder = self.user_dir / folder_name(name, self._taken())
             shutil.copytree(self.folder, folder)
             self.custom[name] = folder
-        write(folder, name, theme, read_file(folder).get("layout"))
+        write(folder, name=name, **theme)
         self.use(name)
 
     def delete(self, name: str):

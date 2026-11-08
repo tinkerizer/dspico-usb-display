@@ -1372,7 +1372,7 @@ setTheme(document.documentElement.dataset.theme || "light");
 let dsThemes = null, dsTheme = null, dsThemeTimer = null;
 
 async function changeDsTheme(request) {
-  if (request.action === "preview") {
+  if (request.action === "preview" || request.action === "sleep") {
     dsThemes = await api("/api/themes", { method: "POST", body: JSON.stringify(request) });
     refreshFrame();
     return;
@@ -1411,6 +1411,14 @@ function showDsTheme(name) {
   const builtIn = dsThemes.builtIn.includes(name);
   $("dsThemeDelete").disabled = builtIn && !dsThemes.edited.includes(name);
   $("dsThemeDelete").textContent = builtIn ? "Reset" : "Delete";
+  const sleep = dsThemes.sleep;
+  $("sleepFile").replaceChildren(new Option("Black screen", ""),
+    ...dsThemes.gifs.map(file => new Option(file.split("/").pop().replace(/\.gif$/i, "").replaceAll("_", " "), file)));
+  $("sleepFile").value = sleep.file;
+  $("sleepScreen").value = sleep.screen;
+  $("sleepScreen").disabled = !sleep.file;
+  $("sleepBrightness").value = sleep.brightness;
+  $("sleepBrightnessValue").textContent = `${sleep.brightness}%`;
   $("dsThemeBars").replaceChildren(...dsThemes.colours.map((colour, index) => {
     const swatch = document.createElement("button");
     swatch.className = "shell-swatch";
@@ -1445,6 +1453,18 @@ $("dsThemeLift").addEventListener("input", () => {
   $("dsThemeLiftValue").textContent = `${dsTheme.lift}%`;
   previewDsTheme();
 });
+// The sleep screen is saved as it changes, as part of the active theme.
+let sleepTimer = null;
+function changeSleep() {
+  const sleep = { file: $("sleepFile").value, screen: $("sleepScreen").value, brightness: Number($("sleepBrightness").value) };
+  $("sleepScreen").disabled = !sleep.file;
+  $("sleepBrightnessValue").textContent = `${sleep.brightness}%`;
+  clearTimeout(sleepTimer);
+  sleepTimer = setTimeout(() => changeDsTheme({ action: "sleep", sleep }).catch(error => toast(error.message, true)), SAVE_DELAY);
+}
+for (const id of ["sleepFile", "sleepScreen"]) $(id).addEventListener("change", () => { play("select"); changeSleep(); });
+$("sleepBrightness").addEventListener("input", changeSleep);
+
 $("dsThemeSelect").addEventListener("change", async () => {
   play("select");
   await changeDsTheme({ action: "use", name: $("dsThemeSelect").value });

@@ -1,6 +1,7 @@
 """Tests for the codec, device session and dashboard. Hardware is not needed."""
 import http.client
 import json
+import shutil
 import socket
 import struct
 import sys
@@ -116,6 +117,17 @@ class AnimationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 codec.encode_animation(str(path), (-20, 0, 8, 8))
 
+    def test_sleep_screen_is_cropped_to_its_drawing_and_centred(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cat.gif"
+            frames = [Image.new("RGB", (400, 300), "#000000") for _ in range(2)]
+            frames[0].paste((255, 200, 0), (100, 50, 110, 60))
+            frames[1].paste((255, 200, 0), (120, 70, 130, 80))
+            frames[0].save(path, save_all=True, append_images=frames[1:], duration=500, loop=0)
+            self.assertEqual(codec.drawing_box(str(path)), (100, 50, 30, 30))
+            area, frames = codec.encode_sleep(str(path), "bottom")
+        self.assertEqual(area, (113, 192 + 81, 30, 30))
+
     def test_crop_selects_part_of_the_source(self):
         with tempfile.TemporaryDirectory() as folder:
             path = self.make_gif(folder)
@@ -196,6 +208,22 @@ class DeviceTests(unittest.TestCase):
         self.assertIn(device.PACKET_RECT_RLE, kinds)
         self.assertIn(device.PACKET_ANIM_RESET, kinds)
         self.assertTrue(ds.status.connected)
+
+    def test_the_sleep_screen_loads_into_its_own_slot_without_playing(self):
+        ds = device.DsDevice()
+        layout_gif = device.Animation((0, 0, 4, 4), [(1, b"a" * 12)])
+        sleep_gif = device.Animation((0, 0, 4, 4), [(1, b"b" * 12)])
+        packets = packets_in(ds._animation_packets([layout_gif], (sleep_gif, 30)))
+        self.assertEqual(packets, [device.PACKET_ANIM_BEGIN, device.PACKET_ANIM_FRAME, device.PACKET_ANIM_PLAY,
+                                   device.PACKET_ANIM_BEGIN, device.PACKET_ANIM_FRAME, device.PACKET_ANIM_SLEEP])
+
+    def test_a_quiet_session_still_sends_keepalives(self):
+        # The DS goes dark when nothing arrives for a while, as when the PC sleeps.
+        ds = device.DsDevice()
+        port = FakePort(on_write=lambda data: ds.stop() if len(port.written) >= 3 else None)
+        with mock.patch.object(device, "KEEPALIVE_SECONDS", 0):
+            ds._session(port, "COM3")
+        self.assertEqual(packets_in(port.written[2]), [device.PACKET_KEEPALIVE])
 
 
 class LayoutTests(unittest.TestCase):
@@ -449,6 +477,27 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual(themes.read_layout(self.store.built_in["Classic"]), self.store.layout)
         self.store.save("Copy", self.own)      # From Classic, so with its layout
         self.assertEqual(self.store.layout, layout.validate(layout.default_layout()))
+
+    def test_sleep_screen_is_part_of_the_theme(self):
+        self.assertEqual(self.store.sleep, {"file": "art:sleep/sleepy_cat.gif", "screen": "top", "brightness": 30})
+        self.assertTrue(layout.resolve_file(self.store.sleep["file"]).is_file())
+        self.store.set_sleep({"file": "", "screen": "bottom", "brightness": 10})
+        self.assertEqual(self.store.folder, self.user_dir / "classic")
+        self.assertEqual(self.reopen().sleep, {"file": "", "screen": "bottom", "brightness": 10})
+        for bad in ({"file": "art:grf/box.bmp"}, {"screen": "left"}, {"brightness": 101}, {"file": "art:../x.gif"}):
+            with self.assertRaises(ValueError):
+                self.store.set_sleep(bad)
+
+    def test_older_saved_themes_get_a_sleep_screen(self):
+        self.store.save("Mine", self.own)
+        folder = self.store.custom["Mine"]
+        info = json.loads((folder / "theme.json").read_text())
+        del info["sleep"]
+        (folder / "theme.json").write_text(json.dumps(info))
+        shutil.rmtree(folder / "sleep")
+        store = self.reopen()
+        self.assertEqual(store.sleep["file"], "art:sleep/sleepy_cat.gif")
+        self.assertTrue((folder / "sleep" / "sleepy_cat.gif").is_file())
 
     def test_uploads_go_in_the_theme(self):
         self.store.use("Dark")

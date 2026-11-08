@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image, ImageSequence
 
 WIDTH, HEIGHT = 256, 384
+SCREEN_HEIGHT = 192
 BLACK = 0x8000
 VBLANK_MS = 16.715
 
@@ -147,3 +148,33 @@ def encode_animation(path: str, rect: Rect, crop: Optional[Rect] = None) -> Tupl
     if len(pictures) > 1:
         frames.append((delays[0], delta(pictures[-1], pictures[0])))
     return (x, y, right - left, bottom - top), frames
+
+
+def drawing_box(path: str) -> Rect:
+    """The part of a GIF that's drawn on, over every frame: not transparent, and not the corner's colour."""
+    box = None
+    with Image.open(path) as gif:
+        background = None
+        for frame in ImageSequence.Iterator(gif):
+            pixels = np.asarray(frame.convert("RGBA")).astype(np.int16)
+            if background is None:
+                background = pixels[0, 0]
+            drawn = (pixels[..., 3] >= 128) & (np.abs(pixels[..., :3] - background[:3]).max(axis=2) > 8)
+            rows, columns = np.flatnonzero(drawn.any(axis=1)), np.flatnonzero(drawn.any(axis=0))
+            if len(rows):
+                found = (int(columns[0]), int(rows[0]), int(columns[-1]) + 1, int(rows[-1]) + 1)
+                box = found if box is None else (min(box[0], found[0]), min(box[1], found[1]),
+                                                 max(box[2], found[2]), max(box[3], found[3]))
+    if box is None:
+        raise ValueError("Nothing is drawn in that GIF")
+    return box[0], box[1], box[2] - box[0], box[3] - box[1]
+
+
+def encode_sleep(path: str, screen: str) -> Tuple[Rect, List[Tuple[int, bytes]]]:
+    """A GIF for the sleep screen: cropped to its drawing, shrunk to fit if needed, and centred on a screen."""
+    crop = drawing_box(path)
+    scale = min(1, WIDTH / crop[2], SCREEN_HEIGHT / crop[3])
+    width, height = max(1, int(crop[2] * scale)), max(1, int(crop[3] * scale))
+    top = SCREEN_HEIGHT if screen == "bottom" else 0
+    rect = ((WIDTH - width) // 2, top + (SCREEN_HEIGHT - height) // 2, width, height)
+    return encode_animation(path, rect, crop)

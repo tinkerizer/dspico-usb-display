@@ -120,6 +120,12 @@
   </label>
   <div class="field">Bar colour</div>
   <div class="swatches bars" id="dsThemeBars"></div>
+  <div class="field">When the PC sleeps</div>
+  <label class="field">Show <select id="sleepFile"></select></label>
+  <label class="field">Screen <select id="sleepScreen"><option value="top">Top</option><option value="bottom">Bottom</option></select></label>
+  <label class="field">Brightness <output id="sleepBrightnessValue"></output>
+    <input id="sleepBrightness" type="range" min="0" max="100" step="5">
+  </label>
   <label class="field">Save as <input id="dsThemeName" type="text" maxlength="24" placeholder="Theme name"></label>
   <div class="row">
     <button class="ds-button" id="dsThemeSave">Save</button>

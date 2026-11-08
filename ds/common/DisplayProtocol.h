@@ -32,6 +32,8 @@ enum DisplayPacketType : u8
     DISPLAY_PACKET_RECT_RAW   = 5,  // u16 x, y, width, height, then ABGR1555 pixels
     DISPLAY_PACKET_RECT_RLE   = 6,  // u16 x, y, width, height, then RLE tokens
 
+    DISPLAY_PACKET_KEEPALIVE  = 9,  // No payload
+
     // Reserved: 7 COPY_RECT, 8 FRAME_END.
 
     // Animations are uploaded once and then play on the DS with no USB traffic.
@@ -40,6 +42,7 @@ enum DisplayPacketType : u8
     DISPLAY_PACKET_ANIM_PLAY  = 0x22,  // u32 slot
     DISPLAY_PACKET_ANIM_STOP  = 0x23,  // u32 slot
     DISPLAY_PACKET_ANIM_RESET = 0x24,  // Stops all animations and frees the store
+    DISPLAY_PACKET_ANIM_SLEEP = 0x25,  // u32 slot, u32 brightness: see below
 };
 
 // Animation pixels with bit 15 clear are transparent and show the live picture under them,
@@ -47,7 +50,15 @@ enum DisplayPacketType : u8
 // Frame 0 of an animation is drawn once. Playback then repeats frames 1 to the
 // end, so the last frame should change the picture back to frame 0. A rect with
 // width 0 draws nothing and only waits.
-#define DISPLAY_ANIM_SLOTS  8
+#define DISPLAY_ANIM_SLOTS  9
+
+// ANIM_SLEEP makes a loaded slot the sleep screen: it doesn't play while the host is there.
+// When the host goes quiet, the screens go black, other animations pause, and it plays at
+// that brightness. A slot past the end means just black. ANIM_RESET clears it.
+
+// The host sends a packet at least every second, a KEEPALIVE if nothing else. After this
+// long with none, such as while the PC sleeps, the DS shows the sleep screen until the next packet.
+#define DISPLAY_HOST_TIMEOUT_VBLANKS  (5 * 60)
 
 // RECT_RLE tokens are u16s covering the rect row by row:
 //   bit 15 set:   the next u16 is a colour, repeated (token & 0x7FFF) + 1 times

@@ -3,6 +3,13 @@
 Each release's version is in [VERSION](VERSION). `tools/release --publish` uses the section for that
 version as the release notes.
 
+## Unreleased
+
+- **Sleep screen:** when the PC sleeps, the DS shows a sleeping cat at low brightness on black,
+  instead of the last picture at full brightness. Each theme picks its GIF, screen and brightness,
+  or just black, under **When the PC sleeps** in the DS theme menu. Needs DS build 17, which the app
+  installs by itself.
+
 ## 1.1.0
 
 - **Themes are whole dashboards:** each theme is a folder with its own layout, colours, art,

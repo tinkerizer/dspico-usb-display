@@ -343,17 +343,23 @@ struct Animation
     u32 nextIndex;
     u32 dueVBlank;
     bool playing;
+    bool started;       // Shown since its PLAY, so it comes back after the sleep screen
 };
 
 static Animation sAnimations[DISPLAY_ANIM_SLOTS];
 static u32 sAnimStoreUsed = 0;
 static vu32 sVBlankCount = 0;
+static u32 sLastPacketVBlank = 0;
+static bool sHostAsleep = false;
+static u32 sSleepSlot = DISPLAY_ANIM_SLOTS;     // None
+static u8 sSleepBrightness = 0;
 static u8* const sAnimStore = (u8*)DISPLAY_ANIM_BASE;
 
 static void resetAnimations()
 {
     memset(sAnimations, 0, sizeof(sAnimations));
     sAnimStoreUsed = 0;
+    sSleepSlot = DISPLAY_ANIM_SLOTS;
 }
 
 static inline u32 frameSize(u32 offset)
@@ -415,6 +421,7 @@ static void playAnimation(u32 slot)
     animation.nextFrame = animation.secondFrame;
     animation.nextIndex = 1;
     animation.playing = animation.frameCount > 1;
+    animation.started = true;
 }
 
 // Runs from the main loop, which VBlank wakes, so frames usually land in VBlank.
@@ -424,7 +431,7 @@ static void updateAnimations()
     for (u32 slot = 0; slot < DISPLAY_ANIM_SLOTS; slot++)
     {
         Animation& animation = sAnimations[slot];
-        if (!animation.playing || (s32)(now - animation.dueVBlank) < 0)
+        if (!animation.playing || (s32)(now - animation.dueVBlank) < 0 || sHostAsleep != (slot == sSleepSlot))
             continue;
 
         const u32 offset = animation.nextFrame;
@@ -439,6 +446,52 @@ static void updateAnimations()
             animation.nextFrame = offset + frameSize(offset);
         }
     }
+}
+
+static bool isLoaded(u32 slot)
+{
+    return slot < DISPLAY_ANIM_SLOTS && sAnimations[slot].frameCount
+        && sAnimations[slot].framesLoaded == sAnimations[slot].frameCount;
+}
+
+static void forgetCover()
+{
+    memset(sCover, 0, sizeof(sCover));
+    memset(sCoverRows, 0, sizeof(sCoverRows));
+}
+
+// Black screens and the sleep animation, keeping the live picture in sBase for later.
+static void showSleepScreen()
+{
+    dmaFillWords(0x80008000, (void*)VRAM_A_BASE, 256 * 192 * 2);
+    dmaFillWords(0x80008000, (void*)VRAM_C_SUB_BG_BASE, 256 * 192 * 2);
+    forgetCover();
+    if (isLoaded(sSleepSlot))
+    {
+        playAnimation(sSleepSlot);
+        applyBrightness(sSleepBrightness);
+    }
+    else
+    {
+        applyBrightness(0);
+    }
+}
+
+// The live picture again, as it was, with the host's animations started over on top.
+static void showLivePicture()
+{
+    if (sSleepSlot < DISPLAY_ANIM_SLOTS)
+        sAnimations[sSleepSlot].playing = false;
+    forgetCover();
+    DC_FlushRange(sBase, sizeof(sBase));
+    dmaCopyWords(3, sBase, (void*)VRAM_A_BASE, 256 * 192 * 2);
+    dmaCopyWords(3, sBase + 256 * 192, (void*)VRAM_C_SUB_BG_BASE, 256 * 192 * 2);
+    for (u32 slot = 0; slot < DISPLAY_ANIM_SLOTS; slot++)
+    {
+        if (slot != sSleepSlot && sAnimations[slot].started && isLoaded(slot))
+            playAnimation(slot);
+    }
+    applyBrightness(sScreenOn ? sBrightness : 0);
 }
 
 static void handleSmallPacket()
@@ -487,6 +540,13 @@ static void handleSmallPacket()
             resetAnimations();
             uncover(0);
             break;
+        case DISPLAY_PACKET_ANIM_SLEEP:
+            if (sPayloadLength >= 8)
+            {
+                sSleepSlot = ringU32(sTail);
+                sSleepBrightness = (u8)ringU32(sTail + 4);
+            }
+            break;
     }
 }
 
@@ -517,6 +577,7 @@ static void drainRing()
                 sTail += sizeof(DisplayPacketHeader);
                 sPacketEnd = sTail + ((sPayloadLength + 3) & ~3u);
                 SHARED_DISPLAY->packetCount = SHARED_DISPLAY->packetCount + 1;
+                sLastPacketVBlank = sVBlankCount;
 
                 if (sPacketType == DISPLAY_PACKET_RECT_RAW)
                     sParseState = ParseState::RectHeader;
@@ -767,6 +828,8 @@ int main(int argc, char* argv[])
             // the host configured (100 until the host sets one).
             clearScreens();
             applyBrightness(sScreenOn ? sBrightness : 0);
+            sLastPacketVBlank = sVBlankCount;
+            sHostAsleep = false;
         }
         else if (gConnected && !connected)
         {
@@ -779,6 +842,18 @@ int main(int argc, char* argv[])
         gConnected = connected;
         if (!gConnected)
             drawBootDiagnostics();
+
+        // A quiet host, such as a sleeping PC, keeps the port open but sends nothing. Fading
+        // to black keeps the picture, so it comes straight back when packets do.
+        const bool asleep = gConnected && sVBlankCount - sLastPacketVBlank > DISPLAY_HOST_TIMEOUT_VBLANKS;
+        if (asleep != sHostAsleep)
+        {
+            sHostAsleep = asleep;
+            if (asleep)
+                showSleepScreen();
+            else if (gConnected)
+                showLivePicture();
+        }
     }
 
     return 0;

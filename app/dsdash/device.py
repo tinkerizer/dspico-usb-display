@@ -18,7 +18,11 @@ USB_VID, USB_PID = 0x1209, 0xDD01
 MAGIC = 0xD5
 PACKET_HELLO, PACKET_CLEAR, PACKET_BRIGHTNESS, PACKET_POWER = 1, 2, 3, 4
 PACKET_RECT_RAW, PACKET_RECT_RLE = 5, 6
+PACKET_KEEPALIVE = 9
+KEEPALIVE_SECONDS = 1     # The DS goes dark after 5 s with no packets, so it notices a sleeping PC
 PACKET_ANIM_BEGIN, PACKET_ANIM_FRAME, PACKET_ANIM_PLAY, PACKET_ANIM_RESET = 0x20, 0x21, 0x22, 0x24
+PACKET_ANIM_SLEEP = 0x25
+SLEEP_SLOT = 8      # The DS has 9 slots: 8 for the layout's GIFs, and this one for the sleep screen
 
 ANIM_STORE_SIZE = 0x80000
 SETTLE_SECONDS = 0.15   # The DS clears both screens just after the port opens
@@ -84,6 +88,7 @@ class DsDevice(threading.Thread):
         self._brightness = 100
         self._brightness_dirty = True
         self._animations: List[Animation] = []
+        self._sleep: Tuple[Optional[Animation], int] = (None, 0)
         self._animations_dirty = True
         self._stopping = False
         self._screen = np.full((codec.HEIGHT, codec.WIDTH), codec.BLACK, dtype=np.uint16)
@@ -101,9 +106,11 @@ class DsDevice(threading.Thread):
             self._brightness_dirty = True
             self._condition.notify()
 
-    def set_animations(self, animations: List[Animation]):
+    def set_animations(self, animations: List[Animation], sleep: Optional[Animation] = None, sleep_brightness: int = 0):
+        """The layout's GIFs, and the one the DS plays at sleep_brightness while the PC is asleep."""
         with self._condition:
             self._animations = animations
+            self._sleep = (sleep, sleep_brightness)
             self._animations_dirty = True
             self._condition.notify()
 
@@ -157,6 +164,7 @@ class DsDevice(threading.Thread):
             self._brightness_dirty = True
             self._animations_dirty = True
 
+        last_sent = time.monotonic()
         while True:
             with self._condition:
                 while not (self._stopping or self._frame is not None or self._brightness_dirty
@@ -168,10 +176,12 @@ class DsDevice(threading.Thread):
                 frame, self._frame = self._frame, None
                 brightness = self._brightness if self._brightness_dirty else None
                 self._brightness_dirty = False
-                animations = self._animations if self._animations_dirty else None
+                animations = (self._animations, self._sleep) if self._animations_dirty else None
                 self._animations_dirty = False
 
             data = bytearray()
+            if time.monotonic() - last_sent >= KEEPALIVE_SECONDS:
+                data += packet(PACKET_KEEPALIVE)
             if brightness is not None:
                 data += packet(PACKET_BRIGHTNESS, struct.pack("<I", brightness))
             if animations is not None:
@@ -180,9 +190,10 @@ class DsDevice(threading.Thread):
             if frame is not None:
                 data += self._frame_packets(frame)
             if animations is not None:
-                data += self._animation_packets(animations)
+                data += self._animation_packets(*animations)
             if data:
                 port.write(bytes(data))
+                last_sent = time.monotonic()
                 self.status.bytes_sent += len(data)
                 self.status.updates_sent += 1
 
@@ -198,10 +209,14 @@ class DsDevice(threading.Thread):
             self._screen[y:y + height, x:x + width] = pixels
         return bytes(out)
 
-    def _animation_packets(self, animations: List[Animation]) -> bytes:
+    def _animation_packets(self, animations: List[Animation], sleep=(None, 0)) -> bytes:
         out = bytearray()
         used = 0
-        for slot, animation in enumerate(animations):
+        sleep_animation, sleep_brightness = sleep
+        slots = list(enumerate(animations[:SLEEP_SLOT]))
+        if sleep_animation:
+            slots.append((SLEEP_SLOT, sleep_animation))
+        for slot, animation in slots:
             used += animation.size
             if used > ANIM_STORE_SIZE:
                 log.warning("Not enough DS memory for animation %d", slot)
@@ -209,5 +224,8 @@ class DsDevice(threading.Thread):
             out += packet(PACKET_ANIM_BEGIN, struct.pack("<II", slot, len(animation.frames)))
             for delay, body in animation.frames:
                 out += packet(PACKET_ANIM_FRAME, struct.pack("<II", slot, delay) + body)
-            out += packet(PACKET_ANIM_PLAY, struct.pack("<I", slot))
+            if slot == SLEEP_SLOT:
+                out += packet(PACKET_ANIM_SLEEP, struct.pack("<II", slot, sleep_brightness))
+            else:
+                out += packet(PACKET_ANIM_PLAY, struct.pack("<I", slot))
         return bytes(out)
