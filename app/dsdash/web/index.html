@@ -21,8 +21,8 @@
   </div>
   <div class="spacer"></div>
   <button class="ds-button" id="fitButton" aria-pressed="false">Pixel perfect</button>
-  <button class="ds-button" id="themeButton">Dark</button>
   <button class="ds-button" id="soundButton" aria-pressed="true">Sound on</button>
+  <button class="ds-button icon-button" id="themeButton"></button>
 </header>
 
 <main>
@@ -63,38 +63,47 @@
         <div class="lcd top"><div class="lcd-content">
           <img class="lcd-frame" alt="Live DS top screen">
           <div class="animations"></div>
-        </div></div>
+        </div><div class="dim"></div></div>
         <div class="lcd bottom"><div class="lcd-content">
           <img class="lcd-frame" alt="Live DS bottom screen">
           <div class="animations"></div>
-        </div></div>
+        </div><div class="dim"></div></div>
         <div id="overlay"></div>
       </div>
     </div>
-    <button class="ds-button edit" id="editButton" title="Or click a screen">Edit layout</button>
-    <nav class="dock" aria-label="Tools">
+    <nav class="dock view-dock" aria-label="Preview">
+      <button class="tile" id="editButton" title="Edit the layout (E), or click a screen" aria-label="Edit"><span class="icon edit"></span><span class="tool-label">Edit</span></button>
+      <button class="tile" id="shellModel" title="Switch between the DS Lite and the DSi" aria-label="DS shell"><span class="icon shell"></span><span class="tool-label" id="shellModelName">DS Lite</span></button>
+      <div class="cells" id="swatches" role="group" aria-label="Shell colour"></div>
+      <input class="shell-swatch" id="shellColour" type="color" title="Custom shell colour" aria-label="Custom shell colour">
+    </nav>
+    <nav class="dock edit-dock" aria-label="Tools">
       <button class="tile" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><span class="icon undo"></span><span class="tool-label">Undo</span></button>
       <button class="tile" id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><span class="icon redo"></span><span class="tool-label">Redo</span></button>
       <button class="tile" id="addButton" title="Add" aria-label="Add" aria-haspopup="dialog" aria-expanded="false"><span class="icon add"></span><span class="tool-label">Add</span></button>
-      <button class="tile" id="toggleLayers" title="Layers" aria-label="Layers" aria-expanded="false"><span class="icon layers"></span><span class="tool-label">Layers</span></button>
-      <button class="tile" id="toggleJson" title="JSON" aria-label="JSON" aria-expanded="false" aria-controls="jsonPanel"><span class="icon code-icon"></span><span class="tool-label">JSON</span></button>
+      <button class="tile" id="toggleLayers" title="Layers (L)" aria-label="Layers" aria-expanded="false"><span class="icon layers"></span><span class="tool-label">Layers</span></button>
+      <button class="tile" id="toggleJson" title="JSON (J)" aria-label="JSON" aria-expanded="false" aria-controls="jsonPanel"><span class="icon code-icon"></span><span class="tool-label">JSON</span></button>
       <label class="tile" title="Upload"><span class="icon upload"></span><span class="tool-label">Upload</span><input id="upload" aria-label="Upload" type="file" accept="image/gif,image/png,image/bmp"></label>
       <button class="tile" id="reset" title="Reset" aria-label="Reset"><span class="icon reset"></span><span class="tool-label">Reset</span></button>
     </nav>
   </div>
 
   <aside class="panel" id="panel" aria-label="Settings">
-    <details class="group" open>
+    <details class="group" data-group="theme" open>
       <summary>Theme</summary>
       <div class="theme-list" id="dsThemeList" role="listbox" aria-label="Theme"></div>
       <div class="row">
         <input id="dsThemeName" type="text" maxlength="24" placeholder="New theme name" aria-label="New theme name">
         <button class="ds-button" id="dsThemeSave" title="Copies this theme, with its layout and images, under a new name">Save copy</button>
       </div>
-      <button class="ds-button" id="dsThemeDelete">Delete</button>
+      <div class="row wrap">
+        <a class="ds-button" id="dsThemeExport" title="Saves this theme as a zip, to share" download>Export</a>
+        <label class="ds-button" title="Adds a theme from a zip">Import<input id="dsThemeImport" type="file" accept=".zip,application/zip" aria-label="Import a theme"></label>
+        <button class="ds-button" id="dsThemeDelete">Delete</button>
+      </div>
     </details>
 
-    <details class="group" open>
+    <details class="group" data-group="colours" open>
       <summary>Colours</summary>
       <div class="pair">
         <label class="field">Paper <input id="dsThemePaper" type="color"></label>
@@ -108,16 +117,17 @@
       </label>
       <div class="field">Bar colour</div>
       <div class="swatches bars" id="dsThemeBars"></div>
+      <button class="ds-button" id="dsThemeUndo" title="Undo the last colour change (Ctrl+Z)" disabled>Undo</button>
     </details>
 
-    <details class="group" open>
+    <details class="group" data-group="screen" open>
       <summary>Screen</summary>
       <label class="field">Brightness <output id="brightnessValue"></output>
         <input id="brightness" type="range" min="0" max="100" step="5">
       </label>
     </details>
 
-    <details class="group" open>
+    <details class="group" data-group="sleep" open>
       <summary>When the PC sleeps</summary>
       <div class="pair">
         <label class="field">Show <select id="sleepFile"></select></label>
@@ -126,16 +136,7 @@
       <label class="field">Brightness <output id="sleepBrightnessValue"></output>
         <input id="sleepBrightness" type="range" min="0" max="100" step="5">
       </label>
-    </details>
-
-    <details class="group" id="shellGroup">
-      <summary>DS shell in this page</summary>
-      <div class="row" id="shellModels">
-        <button class="ds-button" data-model="lite">DS Lite</button>
-        <button class="ds-button" data-model="dsi">DSi</button>
-      </div>
-      <div class="swatches" id="swatches"></div>
-      <label class="field">Custom colour <input id="shellColour" type="color"></label>
+      <button class="ds-button" id="sleepPreview" aria-pressed="false" title="Shows the sleep screen here, without sleeping the PC">Preview</button>
     </details>
   </aside>
 </main>

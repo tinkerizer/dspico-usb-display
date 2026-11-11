@@ -10,9 +10,10 @@ in [docs/PLAN.md](docs/PLAN.md).
 
 - **Live preview and settings:** a Windows tray app shows the DS as it is right now, with themes,
   colours, brightness and the sleep screen beside it.
-- **Editor:** click a screen, or **Edit layout**, to edit at 2× or more. Drag widgets, and the DS
-  updates as you go. Widgets snap to edges and each other
-  (Alt places freely), and arrow keys nudge them. Layers and JSON open on the right.
+- **Editor:** click a screen, or **Edit** (E), to edit at 2× or more. Drag widgets, and the DS
+  updates as you go. Widgets snap to edges and each other (Alt places freely), and arrow keys
+  nudge them. Shift+click selects several, to move, line up, copy (Ctrl+D) or delete together.
+  Layers (L) and JSON (J) open on the right.
 
   ![Editing a widget](docs/images/editing.png)
 
@@ -22,7 +23,8 @@ in [docs/PLAN.md](docs/PLAN.md).
   <img src="docs/images/editor-dsi.png" alt="The editor with a DSi" width="49%"> <img src="docs/images/shell-picker.png" alt="Choosing a shell" width="49%">
 
 - **Themes:** each theme is a whole dashboard in one folder: its layout, colours, the classic DS
-  menu's art, and your images and GIFs. Switch between them, save copies, or share a folder. GIFs
+  menu's art, and your images and GIFs. Switch between them, save copies, or export one as a zip
+  to share. GIFs
   play on the DS itself, with live values showing through their transparent parts. See
   [docs/THEMES.md](docs/THEMES.md).
 

@@ -1,11 +1,11 @@
 """Local web UI. Binds to localhost only, and refuses other Host headers."""
 import json
 import logging
+import re
 import socket
 import struct
 import sys
 import threading
-from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -18,13 +18,15 @@ from .app import App, LayoutConflict
 log = logging.getLogger(__name__)
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
-UI_FONT = layouts.ASSETS / "fonts" / "fusion-pixel-12px-monospaced-zh_hans.otf"
+UI_FONT = layouts.ASSETS / "fonts" / "fusion-pixel-12px-monospaced-latin.otf"
 MAX_UPLOAD = 8 * 1024 * 1024
+MAX_THEME_ZIP = 64 * 1024 * 1024
+EVENT_WAIT = 15         # Seconds between events when nothing is drawn, which shows the app is still there
 HANG_UP_SECONDS = .25
-SOUNDS = {"select.wav", "back.wav", "launch.wav"}
 REVISION_HEADER = "X-Layout-Revision"
 DAY, WEEK = 86400, 7 * 86400
-STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml"}
+STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml",
+                ".png": "image/png", ".wav": "audio/wav"}
 
 
 def make_handler(app: App, port: int):
@@ -85,7 +87,11 @@ def make_handler(app: App, port: int):
                 revision = app.revision
                 self._json(app.layout, revision=revision)
             elif path == "/api/themes":
-                self._json(app.themes.listing())
+                self._json(app.theme_listing())
+            elif path == "/api/events":
+                self._send_events()
+            elif path in ("/api/theme.png", "/api/theme.zip"):
+                self._send_theme(path, parse_qs(urlsplit(self.path).query).get("name", [""])[0])
             elif path == "/api/catalog":
                 self._json(app.catalog())
             elif path == "/api/pixel-scale":
@@ -93,15 +99,7 @@ def make_handler(app: App, port: int):
             elif path.startswith("/web/"):
                 self._send_static(path[len("/web/"):])
             elif path == "/font.otf":
-                self._send(UI_FONT.read_bytes(), "font/otf", cache_seconds=WEEK)     # 4 MB, and it never changes
-            elif path in ("/ui/raised.png", "/ui/flat.png"):
-                out = BytesIO()
-                widgets.button_frame(path[len("/ui/"):-len(".png")]).save(out, "PNG")
-                self._send(out.getvalue(), "image/png")
-            elif path.startswith("/art/"):
-                self._send_art(unquote(path[len("/art/"):]))
-            elif path.startswith("/sound/"):
-                self._send_sound(path[len("/sound/"):])
+                self._send(UI_FONT.read_bytes(), "font/otf", cache_seconds=WEEK)
             elif path.startswith("/api/file/"):
                 self._send_file(unquote(path[len("/api/file/"):]))
             else:
@@ -120,24 +118,35 @@ def make_handler(app: App, port: int):
                 self._json({"error": "Not found"}, 404)
                 return
             self._send(file.read_bytes(), STATIC_TYPES.get(file.suffix, "application/octet-stream"),
-                       cache_seconds=DAY if name.startswith("vendor/") else 0)
+                       cache_seconds=DAY if name.startswith(("vendor/", "ui/")) else 0)
 
-        def _send_art(self, name: str):
-            """Art as PNG with its magenta key colour removed, ready for CSS."""
+        def _send_theme(self, path: str, name: str):
             try:
-                image = widgets.load_art(f"art:{name}")
-            except (layouts.LayoutError, OSError):
+                if path.endswith(".png"):
+                    # The page asks again, with a new address, when the theme changes.
+                    self._send(app.theme_picture(name), "image/png", cache_seconds=DAY)
+                else:
+                    file = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_") or "theme"
+                    self._send(app.themes.export(name), "application/zip",
+                               headers=[("Content-Disposition", f'attachment; filename="{file}.zip"')])
+            except (ValueError, OSError):
                 self._json({"error": "Not found"}, 404)
-                return
-            out = BytesIO()
-            image.save(out, "PNG")
-            self._send(out.getvalue(), "image/png")
 
-        def _send_sound(self, name: str):
-            if name not in SOUNDS:
-                self._json({"error": "Not found"}, 404)
-                return
-            self._send((layouts.ART_DIR / "sound" / name).read_bytes(), "audio/wav")
+        def _send_events(self):
+            """The status, each time the picture is drawn, for as long as the page listens."""
+            self.close_connection = True
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            seen = None
+            try:
+                while not app.stopped:
+                    seen = app.wait_for_tick(seen, EVENT_WAIT)
+                    self.wfile.write(b"data: " + json.dumps(app.status()).encode() + b"\n\n")
+            except OSError:
+                pass        # The page closed.
 
         def _send_pixel_scale(self, reference: str):
             try:
@@ -152,12 +161,12 @@ def make_handler(app: App, port: int):
             if not self._trusted():
                 return
             length = int(self.headers.get("Content-Length", 0))
-            if length > MAX_UPLOAD:
+            url = urlsplit(self.path)
+            if length > (MAX_THEME_ZIP if url.path == "/api/themes/import" else MAX_UPLOAD):
                 self.close_connection = True
                 self._json({"error": "Too large"}, 413)
                 return
             body = self.rfile.read(length)
-            url = urlsplit(self.path)
 
             try:
                 if url.path == "/api/brightness":
@@ -168,6 +177,8 @@ def make_handler(app: App, port: int):
                     self._json(saved, revision=revision)
                 elif url.path == "/api/themes":
                     self._json(app.change_theme(json.loads(body)))
+                elif url.path == "/api/themes/import":
+                    self._json(app.change_theme({"action": "import", "zip": body}))
                 elif url.path == "/api/layout/reset":
                     saved, revision = app.reset_layout(self._sent_revision())
                     self._json(saved, revision=revision)

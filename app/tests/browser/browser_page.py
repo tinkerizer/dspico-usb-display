@@ -25,12 +25,6 @@ STATE = """(() => {
 })()"""
 
 
-def widgets():
-    """Imported late, as the app is only importable once the harness has copied it."""
-    from dsdash import widgets as module
-    return module
-
-
 def css(page, name):
     return page.evaluate("name => document.documentElement.style.getPropertyValue(name)", name)
 
@@ -43,20 +37,13 @@ def rgb(colour):
     return tuple(int(colour[i:i + 2], 16) for i in (1, 3, 5))
 
 
-def open_shell(page):
-    """The shell settings are folded away in the settings panel."""
-    page.evaluate("document.getElementById('shellGroup').open = true")
-
-
 def pick(page, name):
-    open_shell(page)
     page.click(f".shell-swatch[title={name}]")
 
 
 class ShellColourTests(BrowserCase):
     def test_swatches_set_the_colour_and_the_label(self):
         page = self.open()
-        open_shell(page)
         self.assertEqual(page.locator("#swatches .shell-swatch").count(), len(SWATCHES))
         for name, colour in SWATCHES.items():
             with self.subTest(name):
@@ -68,7 +55,6 @@ class ShellColourTests(BrowserCase):
 
     def test_the_shell_itself_changes_colour(self):
         page = self.open()
-        open_shell(page)
         pick(page, "Red")
         page.evaluate(NEXT_PAINT)
         rect = page.evaluate("""(({ left, width }, { top, height }) => ({ x: left + width * .1, y: top + height / 2, width: 4, height: 4 }))
@@ -83,7 +69,6 @@ class ShellColourTests(BrowserCase):
 
     def test_custom_colour_and_swatch_survive_a_reload(self):
         page = self.open()
-        open_shell(page)
         page.locator("#shellColour").fill("#123456")
         wanted = {"colour": "#123456", "stored": "#123456", "input": "#123456", "pressed": [], "label": DARK_LABEL}
         self.assertEqual(page.evaluate(STATE), wanted)
@@ -109,11 +94,10 @@ class ShellColourTests(BrowserCase):
     def test_cursor_tint_follows_the_colour(self):
         page = self.open()
         page.wait_for_function("document.documentElement.style.getPropertyValue('--stylus').includes('data:image/png')")
-        grey = np.asarray(widgets().load_art("art:ui/stylus.png"))
+        grey = np.asarray(Image.open(harness.REPO / "app" / "dsdash" / "web" / "ui" / "stylus.png").convert("RGBA"))
         body = (grey[..., 0] == 128) & (grey[..., 3] == 255)
         self.assertGreater(int(body.sum()), 0)
 
-        open_shell(page)
         seen = set()
         for name in ("Red", "Blue", "White"):
             with self.subTest(name):
@@ -258,6 +242,78 @@ class PageLoadTests(BrowserCase):
         page.evaluate("setEditing(true)")
         page.click("#toggleLayers")
         page.wait_for_selector("#list .item", state="visible")
+
+
+class SettingsTests(BrowserCase):
+    def test_the_shell_tile_switches_between_the_lite_and_the_dsi(self):
+        page = self.open()
+        self.assertEqual(page.text_content("#shellModelName"), "DS Lite")
+        page.click("#shellModel")
+        page.wait_for_function("document.querySelector('#shellArt svg').getAttribute('viewBox') === '0 0 531 544'")
+        self.assertEqual(page.text_content("#shellModelName"), "DSi")
+        self.assertEqual(page.evaluate("localStorage.getItem('shellModel')"), "dsi")
+        page.click("#shellModel")
+        page.wait_for_function("document.querySelector('#shellArt svg').getAttribute('viewBox') === '0 0 552 575'")
+
+    def test_the_page_art_and_sounds_are_its_own_not_a_theme_s(self):
+        page = self.open()
+        urls = page.evaluate("performance.getEntriesByType('resource').map(entry => new URL(entry.name).pathname)")
+        self.assertIn("/web/ui/sound/select.wav", urls, "Sounds should load with the page, not on the first press")
+        self.assertEqual([path for path in urls if path.startswith(("/art/", "/sound/", "/ui/"))], [])
+        self.assertIn("svg", page.inner_html("#themeButton"))
+        page.click("#themeButton")
+        self.assertEqual(page.evaluate("document.documentElement.dataset.theme"), "dark")
+        page.click("#themeButton")
+
+    def test_each_theme_card_shows_a_picture_of_it(self):
+        page = self.open()
+        page.wait_for_function("[...document.querySelectorAll('.theme-card img')].every(i => i.complete && i.naturalWidth === 128)")
+        self.assertGreaterEqual(page.locator(".theme-card img").count(), 2)
+        self.assertIn("/api/theme.zip?name=Classic", page.get_attribute("#dsThemeExport", "href"))
+
+    def test_colour_changes_can_be_undone(self):
+        page = self.open()
+        before = page.evaluate("api('/api/themes').then(l => l.themes.Classic)")
+        self.addCleanup(page.evaluate, "theme => changeDsTheme({ action: 'colours', theme })", before)
+        page.evaluate("colourUndo = []; showColours()")
+        self.assertTrue(page.is_disabled("#dsThemeUndo"))
+        page.locator("#dsThemeLift").fill("20")
+        page.wait_for_function("async () => (await api('/api/themes')).themes.Classic.lift === 20")
+        page.keyboard.press("Control+z")
+        page.wait_for_function("async before => (await api('/api/themes')).themes.Classic.lift === before", arg=before["lift"])
+        self.assertTrue(page.is_disabled("#dsThemeUndo"))
+
+    def test_folded_settings_stay_folded(self):
+        page = self.open()
+        page.click(".group[data-group=sleep] > summary")
+        self.reload(page)
+        self.assertFalse(page.evaluate("document.querySelector('.group[data-group=sleep]').open"))
+        self.assertTrue(page.evaluate("document.querySelector('.group[data-group=theme]').open"))
+
+    def test_the_preview_dims_with_brightness_and_shows_the_sleep_screen(self):
+        page = self.open()
+        self.addCleanup(app_brightness, 100)
+        dim = "Number(getComputedStyle(document.querySelector('.dim')).opacity)"
+        self.assertEqual(page.evaluate(dim), 0)
+        page.locator("#brightness").fill("0")
+        self.assertAlmostEqual(page.evaluate(dim), .7, places=2)
+        page.locator("#brightness").fill("100")
+        page.click("#sleepPreview")
+        self.assertAlmostEqual(page.evaluate(dim), .49, places=2)       # The sleep screen's 30%
+        cat = page.locator(".lcd.top .anim-view img")
+        self.assertEqual(cat.count(), 1)
+        self.assertIn("sleepy_cat", cat.get_attribute("src"))
+        self.assertEqual(page.evaluate("getComputedStyle(document.querySelector('.lcd-frame')).visibility"), "hidden")
+        page.keyboard.press("e")
+        self.assertTrue(page.evaluate("editing"))
+        self.assertFalse(page.evaluate("sleepPreview"), "Editing ends the sleep preview")
+        self.assertEqual(page.locator(".anim-view img[src*=sleepy_cat]").count(), 0)
+        page.keyboard.press("e")
+        self.assertFalse(page.evaluate("editing"))
+
+
+def app_brightness(level):
+    harness.app.set_brightness(level)
 
 
 class ThemeLayoutTests(BrowserCase):

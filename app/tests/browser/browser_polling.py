@@ -1,7 +1,7 @@
-"""How often the page polls. This takes real seconds, so it costs the suite none of its own:
+"""How the page keeps up to date. This takes real seconds, so it costs the suite none of its own:
 
 one page opens when this module is imported, and sits there while the other tests run.
-It records its steady polling, hides itself on a timer, then records the silence.
+It records what arrives, hides itself on a timer, then records the silence.
 """
 import harness
 from harness import BrowserCase, new_page, wait_ready
@@ -11,13 +11,23 @@ HIDE_AFTER_MS = 7000
 SETTLE_MS = 1000
 QUIET_MS = 3000
 
-# Runs before the page's scripts, so every fetch gets a timestamp.
+# Runs before the page's scripts, so every fetch and every pushed status gets a timestamp.
 WATCH = """
 window.fetches = [];
+window.pushed = [];
+window.streams = { opened: 0, closed: 0 };
 const realFetch = window.fetch;
 window.fetch = (url, options) => {
   window.fetches.push({ url: String(url), at: performance.now() });
   return realFetch(url, options);
+};
+window.EventSource = class extends EventSource {
+  constructor(url) {
+    super(url);
+    window.streams.opened++;
+    this.addEventListener('message', () => window.pushed.push(performance.now()));
+  }
+  close() { window.streams.closed++; super.close(); }
 };
 setTimeout(() => {
   Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.pretendHidden });
@@ -59,22 +69,25 @@ class PollingTests(BrowserCase):
         page.wait_for_function(f"window.hiddenAt && performance.now() > window.hiddenAt + {SETTLE_MS + QUIET_MS}",
                                timeout=wait)
 
-    def test_one_frame_fetch_a_second(self):
+    def test_a_frame_is_fetched_when_the_picture_changes(self):
+        """The clock changes it every second. Other tests' edits, going on meanwhile, add a few more."""
         times = page.evaluate(f"{STEADY}{FRAMES}.map(f => f.at)")
         self.assertGreaterEqual(len(times), 4)
-        gaps = [(b - a) / 1000 for a, b in zip(times, times[1:])]
-        rate = len(gaps) / ((times[-1] - times[0]) / 1000)
-        self.assertGreater(min(gaps[1:]), 0.5, "Frames were fetched too close together")
-        self.assertLess(rate, 1.1, "More than one frame fetch a second")
+        rate = (len(times) - 1) / ((times[-1] - times[0]) / 1000)
+        self.assertLess(rate, 3, "Frames were fetched far more often than the picture changes")
         self.assertGreater(rate, 0.7, "Frames were fetched too rarely")
 
-    def test_status_is_fetched_as_often_as_frames(self):
-        frames, statuses = page.evaluate(f"[{STEADY}{FRAMES}.length, {STEADY}{STATUSES}.length]")
-        self.assertLessEqual(abs(frames - statuses), 2)
+    def test_the_status_is_pushed_not_asked_for(self):
+        statuses, pushed = page.evaluate(f"[{STEADY}{STATUSES}.length, window.pushed.filter(at => at < window.hiddenAt).length]")
+        self.assertEqual(statuses, 0, "The page still polls for its status")
+        self.assertGreaterEqual(pushed, 4)
 
-    def test_hidden_tab_stops_polling_and_comes_back(self):
+    def test_hidden_tab_stops_listening_and_comes_back(self):
         late = page.evaluate(f"window.fetches.filter(f => f.at > window.hiddenAt + {SETTLE_MS}).map(f => f.url)")
-        self.assertEqual(late, [], "A hidden tab kept polling")
+        self.assertEqual(late, [], "A hidden tab kept fetching")
+        self.assertEqual(page.evaluate("window.pushed.filter(at => at > window.hiddenAt + 100)"), [], "A hidden tab kept listening")
+        self.assertEqual(page.evaluate("window.streams"), {"opened": 1, "closed": 1})
 
         page.evaluate(SHOW)
         page.wait_for_function(f"window.fetches{FRAMES}.some(f => f.at >= window.shownAt)", timeout=3000)
+        self.assertEqual(page.evaluate("window.streams.opened"), 2)

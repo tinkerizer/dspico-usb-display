@@ -1,11 +1,14 @@
 """DS dashboard themes. Each is a folder: theme.json, with its colours and layout, and all of its art. See docs/THEMES.md."""
+import hashlib
 import json
 import logging
 import os
 import re
 import shutil
+import zipfile
 from copy import deepcopy
-from pathlib import Path
+from io import BytesIO
+from pathlib import Path, PurePosixPath
 from typing import Dict
 
 import numpy as np
@@ -20,6 +23,9 @@ MAX_NAME = 24
 NEUTRAL = 24    # Pixels whose channels differ by less than this count as grey.
 DEFAULT = "Classic"
 SLEEP_DEFAULT = {"file": "", "screen": "top", "brightness": 30}
+MAX_ZIP_FILES, MAX_ZIP_BYTES = 500, 64 * 1024 * 1024
+# Built-in art that has been corrected since. A theme's copy is replaced if it's still the old file.
+OLD_ART = {"quickmenu/topbg.png": "67403e6f89136544ac02b08f3ca9e4e94e1ca559"}
 
 # The DS profile colours, as in the menu's own table. Index matches art:topbar/N.png.
 PROFILE_555 = (0xCE0C, 0x8137, 0x8C1F, 0xFE3F, 0x825F, 0x839E, 0x83F5, 0x83E0,
@@ -185,6 +191,14 @@ class ThemeStore:
         self.edited = {name: folder for name, folder in user.items() if name in self.built_in}
         for folder in user.values():
             self._add_sleep_screen(folder)
+            self._refresh_art(folder)
+
+    def _refresh_art(self, folder: Path):
+        source = self.built_in.get(DEFAULT)
+        for name, old in OLD_ART.items():
+            file = folder / name
+            if source and file.is_file() and hashlib.sha1(file.read_bytes()).hexdigest() == old:
+                shutil.copy2(source / name, file)
 
     def _add_sleep_screen(self, folder: Path):
         """Themes made before sleep screens get Classic's."""
@@ -281,12 +295,69 @@ class ThemeStore:
         return self._writable(self.active_name) / "uploads"
 
     def listing(self) -> dict:
-        return {"active": self.active_name, "themes": self.all(), "builtIn": list(self.built_in),
+        stamps = {name: (folder / "theme.json").stat().st_mtime_ns for name, folder in self.folders().items()}
+        return {"active": self.active_name, "themes": self.all(), "builtIn": list(self.built_in), "stamps": stamps,
                 "edited": list(self.edited), "colours": [profile_colour(i) for i in range(16)],
                 "sleep": self.sleep, "gifs": [file for file in layouts.list_files() if file.endswith(".gif")]}
 
     def _point_art(self):
-        layouts.ART_DIR = self.folder
+        with layouts.ART_LOCK:
+            layouts.ART_DIR = self.folder
+
+    def export(self, name: str) -> bytes:
+        """A theme's folder as a zip, to share."""
+        folder = self.folders().get(name)
+        if folder is None:
+            raise ValueError("No theme with that name")
+        out = BytesIO()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(folder.rglob("*")):
+                if path.is_file() and (path.name == "theme.json" or path.suffix.lower() in layouts.IMAGE_SUFFIXES):
+                    archive.write(path, path.relative_to(folder).as_posix())
+        return out.getvalue()
+
+    def import_zip(self, data: bytes) -> str:
+        """Adds a theme from a zip made by export, and switches to it. Only its theme.json and images are
+        taken, and nothing can land outside its folder. A name that's taken gets a number."""
+        try:
+            archive = zipfile.ZipFile(BytesIO(data))
+        except zipfile.BadZipFile:
+            raise ValueError("That isn't a theme zip")
+        with archive:
+            members = [member for member in archive.infolist() if not member.is_dir()]
+            if len(members) > MAX_ZIP_FILES or sum(member.file_size for member in members) > MAX_ZIP_BYTES:
+                raise ValueError("That zip is too big for a theme")
+            # theme.json is at the top, or in one folder if the theme's folder was zipped.
+            tops = sorted((PurePosixPath(m.filename) for m in members if PurePosixPath(m.filename).name == "theme.json"),
+                          key=lambda path: len(path.parts))
+            if not tops:
+                raise ValueError("That zip has no theme.json")
+            root = tops[0].parent
+            try:
+                info = json.loads(archive.read(str(tops[0])))
+                wanted, colours = clean_name(info.get("name")), clean(info)
+            except (ValueError, AttributeError, KeyError) as error:
+                raise ValueError(f"That theme can't be read: {error}")
+            name, number = wanted, 2
+            while name in self.folders():
+                suffix = f" {number}"
+                name, number = wanted[:MAX_NAME - len(suffix)] + suffix, number + 1
+            folder = self.user_dir / folder_name(name, self._taken())
+            for member in members:
+                path = PurePosixPath(member.filename.replace("\\", "/"))
+                if root not in path.parents and root != PurePosixPath("."):
+                    continue
+                inside = path.relative_to(root)
+                plain = all(re.fullmatch(r"[A-Za-z0-9_ .()-]+", part) and part.strip(". ") for part in inside.parts)
+                if not plain or inside.suffix.lower() not in layouts.IMAGE_SUFFIXES:
+                    continue
+                target = folder / inside
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(archive.read(member))
+            write(folder, **colours, name=name, sleep=info.get("sleep"), layout=info.get("layout"))
+        self.custom[name] = folder
+        self.use(name)
+        return name
 
     def _write_state(self):
         self.state_path.parent.mkdir(parents=True, exist_ok=True)

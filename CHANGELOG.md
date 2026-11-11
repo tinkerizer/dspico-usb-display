@@ -3,20 +3,39 @@
 Each release's version is in [VERSION](VERSION). `tools/release --publish` uses the section for that
 version as the release notes.
 
-## Unreleased
+## 1.3.0
 
 - **Sleep on more PCs:** the sleep screen now shows when the PC suspends its USB ports, which used
   to leave the DS black, and the dashboard always comes back after waking. The DS no longer treats
   a suspended port as a closed one, and the app starts a fresh session after any long pause. Needs
   DS build 18, which the app installs by itself.
 - **Pulled cable:** the DS shows the sleep screen, as it can't tell that from a sleeping PC.
-- **Settings beside the DS:** themes, colours, brightness, the sleep screen and the page's shell
-  are always in a panel next to the preview, so changes show as you make them. Themes are cards
-  to click. Colour changes save to the theme as you go, like layout edits.
-- **Tools only in the editor:** the preview has an **Edit layout** button instead, and the top bar
-  is shorter. An element's settings no longer open over the layer list.
-- **Faster page:** the 4 MB font is cached instead of downloaded on every load, and the preview
-  picture is only fetched when it has changed.
+- **Settings beside the DS:** themes, colours, brightness and the sleep screen are always in a
+  panel next to the preview, so changes show as you make them. Colour changes save to the theme
+  as you go, with **Undo** (Ctrl+Z) to step back. Folded sections stay folded.
+- **Themes as pictures:** each theme's card shows its real layout. **Export** saves a theme as a
+  zip and **Import** adds one, so sharing no longer means finding the data folder.
+- **Sleep preview:** **Preview** under **When the PC sleeps** shows the sleep screen in the page.
+  The preview also dims with the brightness slider, as the DS does.
+- **Under the DS:** the preview has an **Edit** tile, the DS Lite or DSi switch and the shell
+  colours, all on the page's grid. The tools show only in the editor.
+- **Select several:** Shift+click adds to the selection, to move, line up, copy or delete
+  together. Each element has line-up buttons, and **Copy** (Ctrl+D) duplicates it.
+- **Shortcuts:** E opens and closes the editor, L the layers, J the JSON, Ctrl+A selects all.
+- **Whole pixels:** positions typed with a half pixel are rounded, and snapping no longer
+  claims a centre it can't reach. The bottom screen's boxes were a pixel too wide for the grid
+  behind them, with their contents off centre, and the top screen's background had a stray line
+  down its right and bottom edges. Layouts and themes from earlier versions are corrected where
+  they still have the old values.
+- **The page's own look:** buttons, icons, the stylus and sounds no longer come from the active
+  theme's folder, so a theme with different art can't change or break the page. Light mode's
+  buttons match dark mode's, and the light and dark switch is a sun or moon.
+- **DS Lite shell:** the hinge's ends are shaded as half spheres, its middle is the same height
+  as its ends, and the shell is one flat colour like the DSi's. On both shells the D-pad's dark
+  surround stays put when the pad is pressed.
+- **Faster page:** the page's font is 56 KB instead of 4 MB, the app pushes changes to the page
+  instead of being asked every second, and sounds load with the page, so the first click isn't
+  late.
 
 ## 1.2.0
 

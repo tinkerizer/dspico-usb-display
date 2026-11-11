@@ -42,6 +42,10 @@ class App:
         self._stop = threading.Event()
         self._render_now = threading.Event()
         self._animation_key = None
+        self._ticked = threading.Condition()
+        self._ticks = 0
+        self._pictures = {}         # Theme thumbnails, by name
+        self._sleep_box = (None, None)
 
     def start(self):
         self.device.start()
@@ -52,6 +56,8 @@ class App:
     def stop(self):
         self._stop.set()
         self._render_now.set()
+        with self._ticked:
+            self._ticked.notify_all()
         self.device.stop()
         self.firmware.stop()
 
@@ -85,6 +91,8 @@ class App:
                 self.themes.set_sleep(request.get("sleep"))
             elif action == "colours":
                 self.themes.set_colours(request.get("theme") or {})
+            elif action == "import":
+                self.themes.import_zip(request["zip"])
             else:
                 raise ValueError("Unknown theme action")
             if action not in ("preview", "sleep", "colours"):
@@ -93,7 +101,50 @@ class App:
                 self.revision += 1
             self._load_animations()
         self._render_now.set()
-        return self.themes.listing()
+        return self.theme_listing()
+
+    def theme_listing(self) -> dict:
+        """The themes, and where the sleep screen's GIF goes, for the editor to preview it."""
+        listing = self.themes.listing()
+        sleep = listing["sleep"]
+        key = (sleep["file"], sleep["screen"], str(layouts.ART_DIR))
+        if self._sleep_box[0] != key:
+            box = None
+            if sleep["file"]:
+                try:
+                    box = codec.sleep_box(str(layouts.resolve_file(sleep["file"])), sleep["screen"])
+                except (OSError, ValueError):
+                    pass
+            self._sleep_box = (key, box)
+        listing["sleepBox"] = self._sleep_box[1]
+        return listing
+
+    def theme_picture(self, name: str) -> bytes:
+        """A theme drawn at half size, for its card. Kept until the theme changes."""
+        folder = self.themes.folders().get(name)
+        if folder is None:
+            raise ValueError("No theme with that name")
+        key = (str(folder), (folder / "theme.json").stat().st_mtime_ns)
+        if self._pictures.get(name, (None,))[0] != key:
+            with layouts.art_folder(folder):
+                theme = themes.read(folder)
+                themed = themes.apply_layout(themes.read_layout(folder), theme)
+                frame = themes.apply_tone(widgets.render(themed, self.sensors.stats, datetime.now()), themed, theme)
+                widgets.draw_animations(frame, themed)
+            out = BytesIO()
+            frame.resize((128, 192), Image.BOX).save(out, "PNG")
+            self._pictures[name] = (key, out.getvalue())
+        return self._pictures[name][1]
+
+    def wait_for_tick(self, seen: int, timeout: float) -> int:
+        """Waits for the next drawing after `seen`, for the editor's live updates."""
+        with self._ticked:
+            self._ticked.wait_for(lambda: self._ticks != seen or self._stop.is_set(), timeout)
+            return self._ticks
+
+    @property
+    def stopped(self) -> bool:
+        return self._stop.is_set()
 
     def reset_layout(self, revision: Optional[int] = None) -> Tuple[dict, int]:
         return self.set_layout(layouts.default_layout(), revision)
@@ -187,9 +238,10 @@ class App:
                 with self._lock:
                     current = self.layout
                 stats.usb_connected = self.device.status.connected
-                theme = self.themes.active
-                themed = themes.apply_layout(current, theme)
-                frame = themes.apply_tone(widgets.render(themed, stats, datetime.now()), themed, theme)
+                with layouts.ART_LOCK:
+                    theme = self.themes.active
+                    themed = themes.apply_layout(current, theme)
+                    frame = themes.apply_tone(widgets.render(themed, stats, datetime.now()), themed, theme)
                 pixels = codec.to_abgr1555(frame)
                 with self._lock:
                     if self._frame_pixels is None or not np.array_equal(pixels, self._frame_pixels):
@@ -198,6 +250,9 @@ class App:
                 self.device.submit_frame(pixels)
             except Exception:
                 log.exception("Render failed")
+            with self._ticked:
+                self._ticks += 1
+                self._ticked.notify_all()
 
             # Wake just after the next second, or at once for a layout change.
             now = datetime.now()

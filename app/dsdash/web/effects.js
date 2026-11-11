@@ -4,17 +4,22 @@ const Effects = (() => {
   const VOLUME = 0.35, RING_MS = 280, RING_STEPS = 4;
   let audio = null, buffers = {}, soundOn = true;
 
-  function play(name) {
-    if (!soundOn) return;
-    if (!audio) {
-      audio = new AudioContext();
-      for (const sound of ["select", "back", "launch"]) {
-        fetch(`/sound/${sound}.wav`).then(r => r.arrayBuffer()).then(data => audio.decodeAudioData(data))
-          .then(buffer => { buffers[sound] = buffer; if (sound === name) play(name); }).catch(() => {});
-      }
-      return;
+  // Loaded and decoded with the page, so the first press doesn't wait for them. Browsers keep sound
+  // off until the page is used, so it's switched on as a press starts, ahead of the click.
+  try {
+    audio = new AudioContext({ latencyHint: "interactive" });
+    for (const sound of ["select", "back", "launch"]) {
+      fetch(`/web/ui/sound/${sound}.wav`).then(r => r.arrayBuffer()).then(data => audio.decodeAudioData(data))
+        .then(buffer => { buffers[sound] = buffer; }).catch(() => {});
     }
-    if (!buffers[name]) return;
+  } catch {}
+  const wake = () => { if (audio && soundOn && audio.state === "suspended") audio.resume().catch(() => {}); };
+  addEventListener("pointerdown", wake, true);
+  addEventListener("keydown", wake, true);
+
+  function play(name) {
+    if (!soundOn || !audio || !buffers[name]) return;
+    wake();
     const source = audio.createBufferSource(), gain = audio.createGain();
     gain.gain.value = VOLUME;
     source.buffer = buffers[name];

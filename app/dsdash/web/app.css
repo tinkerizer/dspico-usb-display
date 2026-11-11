@@ -6,7 +6,8 @@
   --tok-string: #1f7a2e; --tok-number: #b35a00; --tok-bool: #8a2fb5; --tok-token: #c2185b;
   --page: #f7f7f7; --page-paper: var(--paper); --page-grid: #aaa;
   --blue: #0041c3; --red: #d30000; --green: #1f9a37;
-  --stylus: url("/art/ui/stylus.png") 0 63, auto;
+  --stylus: url("/web/ui/stylus.png") 0 63, auto;
+  --button-top: #fff; --button-bottom: #e4e5e9; --button-down: #d6d8de; --button-shine: #fff;
   --paper: repeating-linear-gradient(#fbfbfb 0 1px, #e3e3e3 1px 2px);
   --shell: #eaebed; --shell-dark: #b2b2b3; --bezel: #3d3d3d; --steel: #3e6b83; --steel-light: #81aec3;
   /* Where the screens sit in shell.svg. --hinge is in DS pixels. */
@@ -15,7 +16,7 @@
   --ds-color: #3d3d3d; --ds-label: #e8e8e8;
 }
 
-/* Dark mode. The tools keep --paper, as the icons have it baked in. */
+/* Dark mode. */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --line: #3e3f44; --ink: #e3e3e6; --soft: #a9a9ae; --edge: #66676d;
@@ -24,6 +25,7 @@
   --tok-string: #7fd08c; --tok-number: #eaa45a; --tok-bool: #c996ea; --tok-token: #f07fae;
   --page: #1f2023; --page-paper: repeating-linear-gradient(#232428 0 1px, #1e1f22 1px 2px); --page-grid: #3a3b40;
   --shell: #2f3034; --shell-dark: #17181a; --steel: #8fc0d6; --steel-light: #5c8ca3;
+  --button-top: #3b3c42; --button-bottom: #2c2d31; --button-down: #232428; --button-shine: rgba(255, 255, 255, .09);
 }
 
 * { box-sizing: border-box; }
@@ -48,25 +50,19 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 button, input, select, textarea { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 
-/* Real menu art: grf/box.bmp, raised on top and pressed below. */
-.ds-button, .tile, .frame {
-  border-style: solid; border-width: 7px; border-color: transparent;
-  border-image: url("/ui/raised.png") 7 fill / 7px / 0 stretch;
-  background: none; cursor: var(--stylus); image-rendering: pixelated;
+/* Buttons are drawn here, not taken from a theme's art, so the page looks the same whatever theme the DS has. */
+.ds-button {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 0 12px; color: var(--ink); text-decoration: none;
+  background: linear-gradient(var(--button-top), var(--button-bottom)); border: 2px solid var(--edge);
+  box-shadow: inset 0 1px 0 var(--button-shine); cursor: var(--stylus);
 }
-/* Buttons are always on light paper, so they keep the light theme's colours. */
-.ds-button, .tile { --blue: #0041c3; --red: #d30000; color: #3d3d3d; }
-.ds-button { padding: 0 8px; min-height: 30px; }
-.ds-button:hover:not(:disabled), .tile:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 2px 0 rgba(0, 65, 195, .35); }
-.ds-button:active:not(:disabled), .tile:active:not(:disabled) { border-image: url("/ui/flat.png") 7 fill / 7px / 0 stretch; transform: translateY(1px); }
-.ds-button:disabled { opacity: .45; cursor: var(--stylus); }
-/* Dark mode's buttons, in the same shape on its own colours. */
-:root[data-theme="dark"] .ds-button {
-  --blue: var(--steel); color: var(--ink); border: 2px solid var(--edge); border-image: none; padding: 0 12px;
-  background: linear-gradient(#3b3c42, #2c2d31); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09);
-}
-:root[data-theme="dark"] .ds-button:active:not(:disabled) { border-image: none; background: #232428; box-shadow: inset 0 1px 0 rgba(0, 0, 0, .3); }
-:root[data-theme="dark"] .ds-button:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09), 0 2px 0 rgba(143, 192, 214, .35); }
+.ds-button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: inset 0 1px 0 var(--button-shine), 0 2px 0 color-mix(in srgb, var(--blue) 35%, transparent); }
+.ds-button:active:not(:disabled) { transform: translateY(1px); background: var(--button-down); box-shadow: inset 0 1px 0 rgba(0, 0, 0, .2); }
+.ds-button:disabled { opacity: .45; }
+.ds-button input[type=file] { position: absolute; width: 0; height: 0; opacity: 0; }
+.icon-button { padding: 0 5px; }
+.icon-button svg { display: block; width: 22px; height: 22px; }
+.tile { border: 0; background: none; cursor: var(--stylus); image-rendering: pixelated; }
 :focus-visible { outline: 2px dotted var(--blue); outline-offset: 2px; }
 
 .topbar {
@@ -102,10 +98,12 @@ html:not(.editing) .screens:hover { outline: 2px solid var(--blue); outline-offs
 .editing .screens { background: #111; box-shadow: 0 0 0 4px #111, 0 0 0 7px var(--edge), 5px 5px 0 7px rgba(0, 0, 0, .18); }
 .done { position: absolute; left: calc(100% + 18px); top: -7px; }
 html:not(.editing) .done { display: none; }
-.editing .dock { margin-top: 14px; }
-/* The tools are for editing, so the preview has one button to start it instead. */
-html:not(.editing) .dock, .editing .edit { display: none; }
-.edit { margin-top: 12px; }
+/* Under the DS: the editor's tools, or in the preview the way in to it and the shell to show. */
+html:not(.editing) .edit-dock, .editing .view-dock { display: none; }
+/* The preview dims with the DS's brightness. A real DS at 0% is dark, not black. */
+.dim { position: absolute; inset: 0; z-index: 1; background: #000; opacity: var(--dim, 0); pointer-events: none; }
+.editing .dim { display: none; }
+.sleeping .lcd-frame { visibility: hidden; }
 .shell-art svg { display: block; width: 100%; height: 100%; }
 /* The shell's buttons. Shadows stay put, so the tops look pushed in. */
 .press { pointer-events: auto; cursor: var(--stylus); }
@@ -151,26 +149,32 @@ html:not(.editing) .dock, .editing .edit { display: none; }
 
 /* The page's 48px grid cells, just below the DS. fitPreview() anchors the grid here, and each
    tile is 2px in from its cell's grid lines, with its name in the cell beside it. */
-.dock { display: flex; flex-wrap: wrap; justify-content: center; max-width: 672px; margin-top: 6px; }
+.dock { display: flex; flex-wrap: wrap; justify-content: center; max-width: 672px; margin-top: 14px; }
 /* The settings screen's tiles. Their names show as tooltips, as the real ones have no text. */
-.tile, .tile:hover:not(:disabled), .tile:active:not(:disabled) { border: 0; border-image: none; transform: none; filter: none; box-shadow: none; }
 .tile { position: relative; flex: none; display: block; width: 45px; height: 45px; margin: 2px 1px 1px 2px; padding: 0; background: none; }
 .tile:hover:not(:disabled)::after, .tile[aria-expanded="true"]::after, .tile:focus-visible::after {
-  content: ""; position: absolute; left: -2px; top: -2px; width: 49px; height: 49px; background: url("/art/ui/tools/selected.png"); pointer-events: none;
+  content: ""; position: absolute; left: -2px; top: -2px; width: 49px; height: 49px; background: url("/web/ui/tools/selected.png"); pointer-events: none;
 }
 .tile:disabled { opacity: .45; cursor: var(--stylus); }
 .tile input { position: absolute; inset: 0; opacity: 0; cursor: var(--stylus); }
 .icon { display: block; width: 45px; height: 45px; background: center no-repeat; }
 .dock .tile { display: flex; align-items: center; width: 93px; text-align: left; }
 .dock .icon { flex: none; }
+.dock #shellModel { width: 141px; }     /* Three cells, as its name is longer */
 .tool-label { padding-left: 9px; color: var(--ink); }
-.icon.undo { background-image: url("/art/ui/tools/undo.png"); }
-.icon.redo { background-image: url("/art/ui/tools/redo.png"); }
-.icon.add { background-image: url("/art/ui/tools/add.png"); }
-.icon.layers { background-image: url("/art/ui/tools/layers.png"); }
-.icon.code-icon { background-image: url("/art/ui/tools/code.png"); }
-.icon.upload { background-image: url("/art/ui/tools/upload.png"); }
-.icon.reset { background-image: url("/art/ui/tools/reset.png"); }
+/* Shell colours, one to a grid cell. */
+.cells { display: flex; }
+.dock .shell-swatch { flex: none; width: 45px; height: 45px; margin: 2px 1px 1px 2px; }
+.dock input.shell-swatch { background: none; }
+.icon.undo { background-image: url("/web/ui/tools/undo.png"); }
+.icon.redo { background-image: url("/web/ui/tools/redo.png"); }
+.icon.add { background-image: url("/web/ui/tools/add.png"); }
+.icon.layers { background-image: url("/web/ui/tools/layers.png"); }
+.icon.code-icon { background-image: url("/web/ui/tools/code.png"); }
+.icon.upload { background-image: url("/web/ui/tools/upload.png"); }
+.icon.edit { background-image: url("/web/ui/tools/edit.png"); }
+.icon.shell { background-image: url("/web/ui/tools/shell.png"); }
+.icon.reset { background-image: url("/web/ui/tools/reset.png"); }
 
 /* Layers and JSON: a drawer down the right, from the top bar to the bottom. The DS centres in what's left. */
 :root { --drawer: 380px; }
@@ -186,7 +190,7 @@ html:not(.editing) .drawer { display: none; }
 
 /* Settings: what most people change day to day, beside the DS so its effect shows as it changes.
    It's in the drawer's place, and the editor hides it. */
-:root { --panel: 300px; }
+:root { --panel: 320px; }
 html:not(.editing) main { padding-right: calc(var(--panel) + 16px); }
 .editing .panel { display: none; }
 .panel {
@@ -202,16 +206,16 @@ html:not(.editing) main { padding-right: calc(var(--panel) + 16px); }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .panel .row input { flex: 1; min-width: 0; }
 
-/* One card per theme: a small DS in its colours, and its name. */
-.theme-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
-.theme-card { display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 8px; text-align: left; color: var(--ink); background: var(--surface); border: 2px solid var(--line); cursor: var(--stylus); }
-.theme-card:hover { background: var(--hover); }
-.theme-card[aria-selected="true"] { border-color: var(--blue); background: var(--line-active); }
+/* One card per theme: a picture of it at half size, and its name. */
+.theme-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.theme-card { display: block; min-width: 0; padding: 0; text-align: left; color: var(--ink); background: #000; border: 2px solid var(--line); cursor: var(--stylus); }
+.theme-card:hover { border-color: var(--edge); }
+.theme-card[aria-selected="true"] { border-color: var(--blue); box-shadow: 0 0 0 2px var(--focus); }
+.theme-card img { display: block; width: 128px; max-width: 100%; aspect-ratio: 128 / 192; margin: 0 auto; image-rendering: auto; }
+.theme-card .caption { display: flex; gap: 4px; padding: 2px 6px; background: var(--surface); }
+.theme-card[aria-selected="true"] .caption { background: var(--line-active); }
 .theme-card .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .theme-card .tag { color: var(--soft); }
-.theme-chip { position: relative; flex: none; width: 24px; height: 32px; background: var(--chip-paper); border: 2px solid var(--edge); box-shadow: inset 0 4px 0 var(--chip-bar); }
-.theme-chip::before { content: ""; position: absolute; left: -2px; right: -2px; top: 13px; height: 2px; background: var(--edge); }
-.theme-chip::after { content: ""; position: absolute; left: 3px; right: 3px; top: 7px; height: 2px; background: var(--chip-ink); box-shadow: 0 11px 0 var(--chip-ink), 0 16px 0 var(--chip-ink); }
 .tabs { position: relative; display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 2px solid var(--line); }
 .tabs button { flex: 1; padding: 4px 0; border: 0; background: none; cursor: var(--stylus); color: var(--soft); }
 .tabs button[aria-selected="true"] { color: var(--steel); }
@@ -230,6 +234,7 @@ span.twisty { border: 0; background: none; }
 .item.hidden .name { text-decoration: line-through; opacity: .6; }
 .row { display: flex; gap: 6px; align-items: center; }
 .row.center { justify-content: center; }
+.row.wrap { flex-wrap: wrap; margin-top: 6px; }
 
 .code { position: relative; flex: 1; min-height: 120px; border: 2px solid var(--edge); overflow: hidden; background: var(--surface); }
 .code pre, .code textarea { position: absolute; inset: 0; margin: 0; padding: 6px; border: 0; width: 100%; height: 100%; font: 12px/18px "Fusion Pixel", monospace; white-space: pre; tab-size: 2; }
@@ -254,7 +259,6 @@ span.twisty { border: 0; background: none; }
   border: 3px solid var(--edge); border-radius: 6px; box-shadow: 4px 4px 0 rgba(0, 0, 0, .18);
 }
 #addMenu { width: 336px; }
-#brightnessMenu { width: 240px; }
 .bubble-scroll { max-height: calc(100vh - 110px); overflow: hidden auto; margin-right: -6px; padding-right: 6px; }
 .tail { position: absolute; width: 12px; height: 12px; background: var(--surface); border: 3px solid var(--edge); border-width: 0 0 3px 3px; transform: rotate(45deg); }
 .bubble-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -302,7 +306,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .crop-handle.se { right: 0; bottom: 0; cursor: nwse-resize; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
 .chips button { padding: 0 6px; min-height: 22px; background: var(--surface); border: 2px solid var(--edge); cursor: var(--stylus); }
-.chips button:hover { color: #fff; background: var(--blue); border-color: var(--blue); }
+.chips.align { display: grid; grid-template-columns: repeat(3, 1fr); }
+.chips button:disabled { opacity: .45; }
+.chips button:hover:not(:disabled) { color: #fff; background: var(--blue); border-color: var(--blue); }
 
 .add-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .add-grid button { width: 100%; min-height: 40px; }

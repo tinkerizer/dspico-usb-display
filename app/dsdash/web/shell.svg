@@ -3,8 +3,7 @@
      Lettering is Varela Round, as outlines (SIL Open Font License 1.1). -->
 <style>
 .shell { --base: var(--ds-color, #3d3d3d); }
-.shell .lid { fill: url(#lid); }
-.shell .base { fill: url(#base); }
+.shell .lid, .shell .base { fill: var(--base); }
 .shell .bezel { fill: color-mix(in srgb,var(--base),#fff 4%); stroke: color-mix(in srgb,var(--base),#000 30%); stroke-width: .9; }
 .shell .plate { fill: var(--base); }   /* The same shell plastic */
 .shell .bumper { fill: color-mix(in srgb,var(--base),#fff 5%); stroke: color-mix(in srgb,var(--base),#000 22%); stroke-width: .5; }
@@ -13,12 +12,14 @@
 .shell .glass, .shell .screen-edge { fill: #000; }   /* Not .lcd: the page uses that for the live screens */
 .shell .hinge { fill: url(#hinge); }
 .shell .seam { fill: color-mix(in srgb,var(--base),#000 94%); }
-.shell .crease { fill: color-mix(in srgb,var(--base),#000 38%); }
 .shell .grip { fill: color-mix(in srgb,var(--base),#fff 15%); }
 .shell .led { fill: #7dffa0; }
 .shell .hole { fill: color-mix(in srgb,var(--base),#000 96%); }
 .shell .pad { fill: color-mix(in srgb,var(--base),#000 2%); stroke: color-mix(in srgb,var(--base),#000 14%); stroke-width: .45; }
-.shell .dpad { fill: url(#dished); stroke: color-mix(in srgb,var(--base),#000 92%); stroke-width: 1.4; }
+.shell .dpad { fill: url(#dished); }
+/* The cutout the pad sits in. It belongs to the shell, so it stays put when the pad rocks. */
+.shell .dpad-cut { fill: color-mix(in srgb,var(--base),#000 92%); stroke: color-mix(in srgb,var(--base),#000 92%); stroke-width: 1.4; }
+.shell .dpad-rim { fill: none; stroke: color-mix(in srgb,var(--base),#000 92%); stroke-width: 1.4; }
 .shell .drop { fill: #000; fill-opacity: .16; }   /* A soft shadow */
 .shell .well { fill: color-mix(in srgb,var(--base),#000 72%); }
 .shell .ring { fill: color-mix(in srgb,var(--base),#000 78%); }
@@ -32,9 +33,7 @@
 .shell .heavy { stroke: var(--ds-label, #e8e8e8); stroke-width: .35; }
 </style>
 <defs>
-<linearGradient id="lid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:color-mix(in srgb,var(--base),#fff 2.6%)"/><stop offset=".25" style="stop-color:color-mix(in srgb,var(--base),#fff 0.5%)"/><stop offset="1" style="stop-color:color-mix(in srgb,var(--base),#000 3.3%)"/></linearGradient>
-<linearGradient id="base" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:color-mix(in srgb,var(--base),#fff 0.5%)"/><stop offset="1" style="stop-color:color-mix(in srgb,var(--base),#000 8.2%)"/></linearGradient>
-<linearGradient id="hinge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:color-mix(in srgb,var(--base),#000 27.9%)"/><stop offset="0.04" style="stop-color:color-mix(in srgb,var(--base),#000 14.8%)"/><stop offset="0.1" style="stop-color:color-mix(in srgb,var(--base),#fff 0.5%)"/><stop offset="0.2" style="stop-color:color-mix(in srgb,var(--base),#fff 3.1%)"/><stop offset="0.3" style="stop-color:color-mix(in srgb,var(--base),#fff 6.2%)"/><stop offset="0.45" style="stop-color:color-mix(in srgb,var(--base),#fff 8.8%)"/><stop offset="0.6" style="stop-color:color-mix(in srgb,var(--base),#fff 6.2%)"/><stop offset="0.7" style="stop-color:color-mix(in srgb,var(--base),#fff 2.6%)"/><stop offset="0.8" style="stop-color:color-mix(in srgb,var(--base),#000 3.3%)"/><stop offset="0.9" style="stop-color:color-mix(in srgb,var(--base),#000 14.8%)"/><stop offset="0.96" style="stop-color:color-mix(in srgb,var(--base),#000 23.0%)"/><stop offset="1" style="stop-color:color-mix(in srgb,var(--base),#000 44.3%)"/></linearGradient>
+<linearGradient id="hinge" x1="0" y1="0" x2="0" y2="1"><stop offset="0.0" style="stop-color:color-mix(in srgb,var(--base),#000 36%)"/><stop offset="0.04" style="stop-color:color-mix(in srgb,var(--base),#000 19%)"/><stop offset="0.1" style="stop-color:color-mix(in srgb,var(--base),#000 8%)"/><stop offset="0.2" style="stop-color:color-mix(in srgb,var(--base),#000 1%)"/><stop offset="0.3" style="stop-color:color-mix(in srgb,var(--base),#fff 2.9%)"/><stop offset="0.4" style="stop-color:color-mix(in srgb,var(--base),#fff 6.2%)"/><stop offset="0.5" style="stop-color:color-mix(in srgb,var(--base),#fff 8.8%)"/><stop offset="0.6" style="stop-color:color-mix(in srgb,var(--base),#fff 6.2%)"/><stop offset="0.7" style="stop-color:color-mix(in srgb,var(--base),#fff 2.9%)"/><stop offset="0.8" style="stop-color:color-mix(in srgb,var(--base),#000 1%)"/><stop offset="0.9" style="stop-color:color-mix(in srgb,var(--base),#000 8%)"/><stop offset="0.96" style="stop-color:color-mix(in srgb,var(--base),#000 19%)"/><stop offset="1.0" style="stop-color:color-mix(in srgb,var(--base),#000 36%)"/></linearGradient>
 <!-- The D-pad's face is dished: its arm ends stand higher than its middle, so it darkens towards the centre. -->
 <radialGradient id="dished" gradientUnits="userSpaceOnUse" cx="65" cy="409" r="39"><stop offset="0" style="stop-color:color-mix(in srgb,var(--base),#000 9%)"/><stop offset=".35" style="stop-color:color-mix(in srgb,var(--base),#000 4%)"/><stop offset=".75" style="stop-color:color-mix(in srgb,var(--base),#fff 2%)"/><stop offset="1" style="stop-color:color-mix(in srgb,var(--base),#fff 4%)"/></radialGradient>
 <linearGradient id="raised" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:color-mix(in srgb,var(--base),#fff 5.2%)"/><stop offset="1" style="stop-color:color-mix(in srgb,var(--base),#fff 2.6%)"/></linearGradient>
@@ -43,13 +42,14 @@
 <linearGradient id="rim" x1=".25" y1="0" x2=".75" y2="1"><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".16"/></linearGradient>
 <linearGradient id="under-hinge" gradientUnits="userSpaceOnUse" x1="0" y1="287" x2="0" y2="345.5"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset=".316" stop-color="#000" stop-opacity=".55"/><stop offset=".521" stop-color="#000" stop-opacity=".26"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
 <filter id="lift" x="-5%" y="-5%" width="110%" height="115%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".5"/></filter>
-<pattern id="brushed" width="23" height="3.1" patternUnits="userSpaceOnUse"><rect width="23" height=".5" fill="#fff" fill-opacity=".011"/><rect y="1.4" width="17" height=".4" fill="#000" fill-opacity=".025"/><rect x="9" y="2.3" width="14" height=".35" fill="#fff" fill-opacity=".009"/></pattern>
+<!-- The hinge's ends are half spheres: the barrel's own shading, from its middle to its edge, turned all the way round. -->
+<radialGradient id="hinge-end" gradientUnits="userSpaceOnUse" cx="0" cy="287" r="18.5"><stop offset="0" style="stop-color:color-mix(in srgb,var(--base),#fff 8.8%)"/><stop offset="0.2" style="stop-color:color-mix(in srgb,var(--base),#fff 6.2%)"/><stop offset="0.4" style="stop-color:color-mix(in srgb,var(--base),#fff 2.9%)"/><stop offset="0.6" style="stop-color:color-mix(in srgb,var(--base),#000 1%)"/><stop offset="0.8" style="stop-color:color-mix(in srgb,var(--base),#000 8%)"/><stop offset="0.92" style="stop-color:color-mix(in srgb,var(--base),#000 19%)"/><stop offset="1" style="stop-color:color-mix(in srgb,var(--base),#000 36%)"/></radialGradient>
+<path id="hinge-end-shape" d="M0.2 268.5H0A18.5 18.5 0 0 0 0 305.5H0.2Z" fill="url(#hinge-end)"/>
 <clipPath id="base-shape"><path id="base-outline" d="M0 287H552V556A19 19 0 0 1 533 575H19A19 19 0 0 1 0 556Z"/></clipPath>
 </defs>
 
 <!-- Lower half -->
 <path class="base" d="M0 287H552V556A19 19 0 0 1 533 575H19A19 19 0 0 1 0 556Z"/>
-<path fill="url(#brushed)" d="M0 287H552V556A19 19 0 0 1 533 575H19A19 19 0 0 1 0 556Z"/>
 <!-- From the top of the lower half, so the corners beside the hinge's rounded ends match the shell below -->
 <rect fill="url(#under-hinge)" clip-path="url(#base-shape)" x="0" y="287" width="552" height="58.5"/>
 <!-- Where the two halves of the casing meet -->
@@ -83,7 +83,6 @@
 
 <!-- Upper half -->
 <path class="lid" d="M19 0H533A19 19 0 0 1 552 19V265.5A1 1 0 0 1 551 266.5H483.1V268.5H68.9V266.5H1A1 1 0 0 1 0 265.5V19A19 19 0 0 1 19 0Z"/>
-<path fill="url(#brushed)" d="M19 0H533A19 19 0 0 1 552 19V265.5A1 1 0 0 1 551 266.5H483.1V268.5H68.9V266.5H1A1 1 0 0 1 0 265.5V19A19 19 0 0 1 19 0Z"/>
 <!-- The casing seam, then the lid curving away at its edge -->
 <path class="lid-edge" d="M0.4 19A18.6 18.6 0 0 1 19 0.4H533A18.6 18.6 0 0 1 551.6 19V266.5M0.4 19V266.5" stroke-width="0.8" stroke-opacity="0.07"/>
 <path class="lid-edge" d="M1.2 19A17.8 17.8 0 0 1 19 1.2H533A17.8 17.8 0 0 1 550.8 19V266.5M1.2 19V266.5" stroke-width="0.8" stroke-opacity="0.12"/>
@@ -117,7 +116,8 @@
 <!-- Hinge: one height all along. The lid meets its middle part, with a small gap above the ends. -->
 <rect class="hinge" filter="url(#lift)" x="0" y="268.5" width="552" height="37.0" rx="18.5"/>
 <rect class="hinge" x="68" y="268.5" width="416" height="37"/>
-<rect class="crease" x="68" y="268.5" width="416" height="1.2"/>
+<use href="#hinge-end-shape" x="18.5"/>
+<use href="#hinge-end-shape" transform="translate(533.5) scale(-1 1)"/>
 <rect class="seam" x="67.1" y="268.5" width="1.8" height="37"/>
 <rect class="seam" x="483.1" y="268.5" width="1.8" height="37"/>
 <!-- Microphone, measured from a photo of a DS Lite -->
@@ -137,7 +137,9 @@
 
 <!-- Controls -->
 <g class="press" data-dpad="yes"><path class="drop" transform="translate(.5 1)" d="M51.50 372.10A1.6 1.6 0 0 1 53.10 370.50L76.90 370.50A1.6 1.6 0 0 1 78.50 372.10L78.50 393.90A1.6 1.6 0 0 0 80.10 395.50L101.90 395.50A1.6 1.6 0 0 1 103.50 397.10L103.50 420.90A1.6 1.6 0 0 1 101.90 422.50L80.10 422.50A1.6 1.6 0 0 0 78.50 424.10L78.50 445.90A1.6 1.6 0 0 1 76.90 447.50L53.10 447.50A1.6 1.6 0 0 1 51.50 445.90L51.50 424.10A1.6 1.6 0 0 0 49.90 422.50L28.10 422.50A1.6 1.6 0 0 1 26.50 420.90L26.50 397.10A1.6 1.6 0 0 1 28.10 395.50L49.90 395.50A1.6 1.6 0 0 0 51.50 393.90Z"/>
+<path class="dpad-cut" d="M51.50 372.10A1.6 1.6 0 0 1 53.10 370.50L76.90 370.50A1.6 1.6 0 0 1 78.50 372.10L78.50 393.90A1.6 1.6 0 0 0 80.10 395.50L101.90 395.50A1.6 1.6 0 0 1 103.50 397.10L103.50 420.90A1.6 1.6 0 0 1 101.90 422.50L80.10 422.50A1.6 1.6 0 0 0 78.50 424.10L78.50 445.90A1.6 1.6 0 0 1 76.90 447.50L53.10 447.50A1.6 1.6 0 0 1 51.50 445.90L51.50 424.10A1.6 1.6 0 0 0 49.90 422.50L28.10 422.50A1.6 1.6 0 0 1 26.50 420.90L26.50 397.10A1.6 1.6 0 0 1 28.10 395.50L49.90 395.50A1.6 1.6 0 0 0 51.50 393.90Z"/>
 <path class="dpad" d="M51.50 372.10A1.6 1.6 0 0 1 53.10 370.50L76.90 370.50A1.6 1.6 0 0 1 78.50 372.10L78.50 393.90A1.6 1.6 0 0 0 80.10 395.50L101.90 395.50A1.6 1.6 0 0 1 103.50 397.10L103.50 420.90A1.6 1.6 0 0 1 101.90 422.50L80.10 422.50A1.6 1.6 0 0 0 78.50 424.10L78.50 445.90A1.6 1.6 0 0 1 76.90 447.50L53.10 447.50A1.6 1.6 0 0 1 51.50 445.90L51.50 424.10A1.6 1.6 0 0 0 49.90 422.50L28.10 422.50A1.6 1.6 0 0 1 26.50 420.90L26.50 397.10A1.6 1.6 0 0 1 28.10 395.50L49.90 395.50A1.6 1.6 0 0 0 51.50 393.90Z"/>
+<path class="dpad-rim" d="M51.50 372.10A1.6 1.6 0 0 1 53.10 370.50L76.90 370.50A1.6 1.6 0 0 1 78.50 372.10L78.50 393.90A1.6 1.6 0 0 0 80.10 395.50L101.90 395.50A1.6 1.6 0 0 1 103.50 397.10L103.50 420.90A1.6 1.6 0 0 1 101.90 422.50L80.10 422.50A1.6 1.6 0 0 0 78.50 424.10L78.50 445.90A1.6 1.6 0 0 1 76.90 447.50L53.10 447.50A1.6 1.6 0 0 1 51.50 445.90L51.50 424.10A1.6 1.6 0 0 0 49.90 422.50L28.10 422.50A1.6 1.6 0 0 1 26.50 420.90L26.50 397.10A1.6 1.6 0 0 1 28.10 395.50L49.90 395.50A1.6 1.6 0 0 0 51.50 393.90Z"/>
 <path class="mark" d="M65 379L65 393"/><path class="mark" d="M65 425L65 439"/><path class="mark" d="M35 409L49 409"/><path class="mark" d="M81 409L95 409"/></g>
 <g class="press"><circle class="drop" cx="487.0" cy="365.4" r="16"/><circle class="ring" cx="486.5" cy="364.5" r="15.7"/><circle class="button" cx="486.5" cy="364.5" r="14.9"/><circle class="rim" cx="486.5" cy="364.5" r="14.5"/><path class="ink heavy" d="M481.63 371.4Q481.3 371.4 481.06 371.16Q480.82 370.92 480.82 370.58Q480.82 370.27 480.99 370.04L485.5 364.5L481.03 359Q480.85 358.77 480.85 358.45Q480.85 358.08 481.1 357.84Q481.34 357.6 481.71 357.6Q482.18 357.6 482.43 357.95L486.55 363.17L490.66 357.91Q490.88 357.6 491.31 357.6Q491.66 357.6 491.91 357.84Q492.16 358.08 492.16 358.44Q492.16 358.71 492.01 358.92L487.5 364.48L492.01 370.02Q492.18 370.21 492.18 370.53Q492.18 370.88 491.95 371.14Q491.72 371.4 491.31 371.4Q490.88 371.4 490.6 371.03L486.43 365.79L482.32 371.05Q482.02 371.4 481.63 371.4Z"/></g>
 <g class="press"><circle class="drop" cx="518.8" cy="396.9" r="16"/><circle class="ring" cx="518.3" cy="396" r="15.7"/><circle class="button" cx="518.3" cy="396" r="14.9"/><circle class="rim" cx="518.3" cy="396" r="14.5"/><path class="ink heavy" d="M512.88 402.9Q512.47 402.9 512.24 402.65Q512 402.4 512 402.03Q512 401.87 512.1 401.64L517.07 389.9Q517.21 389.58 517.49 389.34Q517.77 389.1 518.2 389.1H518.4Q518.85 389.1 519.12 389.34Q519.39 389.58 519.53 389.9L524.5 401.64Q524.6 401.87 524.6 402.03Q524.6 402.4 524.36 402.65Q524.13 402.9 523.72 402.9Q523.12 402.9 522.88 402.36L521.61 399.31H514.98L513.72 402.36Q513.48 402.9 512.88 402.9ZM515.67 397.7H520.93L518.3 391.36Z"/></g>

@@ -19,7 +19,7 @@ while read -r file; do
     case "$file" in
         app/dsdash/codec.py)    tests+=(CodecTests AnimationTests AnimationScreenTests DeviceTests) ;;
         app/dsdash/device.py)   tests+=(DeviceTests AnimationTests AnimationScreenTests) ;;
-        app/dsdash/layout.py)   tests+=(LayoutTests DashboardTests) ;;
+        app/dsdash/layout.py)   tests+=(LayoutTests AlignmentTests DashboardTests) ;;
         app/dsdash/widgets.py)  tests+=(DashboardTests UsbIconTests CalendarTests TemperatureTests) ;;
         app/dsdash/server.py)   tests+=(ServerTests ConnectionTests RevisionTests); browser=yes ;;
         app/dsdash/firmware.py) tests+=(FirmwareTests) ;;

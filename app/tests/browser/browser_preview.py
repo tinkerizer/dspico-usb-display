@@ -12,7 +12,7 @@ from harness import (HINGE, NEXT_PAINT, SEAM, W, BrowserCase, black_frame, chang
 
 SIZES = [(1920, 1060), (1920, 1080), (1366, 768), (1280, 720), (1600, 900), (2560, 1440), (1000, 800)]
 RECTS = """() => Object.fromEntries(Object.entries({
-  top: '.lcd.top', bottom: '.lcd.bottom', screens: '#screens', dock: '.dock', console: '.console', bar: '.topbar', edit: '#editButton', panel: '#panel',
+  top: '.lcd.top', bottom: '.lcd.bottom', screens: '#screens', dock: '.edit-dock', console: '.console', bar: '.topbar', edit: '.view-dock', panel: '#panel',
 }).map(([name, selector]) => {
   const { left, top, right, bottom, width, height } = document.querySelector(selector).getBoundingClientRect();
   return [name, { left, top, right, bottom, width, height }];
@@ -142,7 +142,7 @@ class ShelfTests(BrowserCase):
                 with self.subTest(width=width, height=height, editing=editing):
                     resize(page, width, height)
                     self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width)
-                    page.evaluate("document.querySelector(editing ? '.dock' : '#editButton').scrollIntoView({ block: 'end' })")
+                    page.evaluate("on => document.querySelector(on ? '.edit-dock' : '.view-dock').scrollIntoView({ block: 'end' })", editing)
                     page.evaluate(NEXT_PAINT)
                     under = page.evaluate(RECTS)[name]
                     self.assertGreater(under["height"], 0)
@@ -151,8 +151,10 @@ class ShelfTests(BrowserCase):
 
     def test_tools_show_only_in_the_editor_just_below_the_screens(self):
         page = self.open(width=1920, height=1060)
-        self.assertFalse(page.locator(".dock").is_visible())
+        self.assertFalse(page.locator(".edit-dock").is_visible())
         self.assertTrue(page.locator("#editButton").is_visible())
+        label = page.locator("#editButton .tool-label")
+        self.assertEqual((label.text_content(), page.locator("#editButton .icon").bounding_box()["width"]), ("Edit", 45))
         page.click("#editButton")
         r = page.evaluate(RECTS)
         self.assertFalse(page.locator("#editButton").is_visible())
@@ -178,13 +180,13 @@ class ShelfTests(BrowserCase):
 
     def test_grid_runs_through_the_tile_cells(self):
         page = self.open(width=1920, height=1060)
-        for editing, fill, scroll in ((True, False, 0), (True, False, 100000), (True, True, 0)):
+        for editing, fill, scroll in ((True, False, 0), (True, False, 100000), (True, True, 0), (False, False, 0)):
             page.evaluate("([editing, fill]) => { setEditing(editing); setFill(fill); }", [editing, fill])
             page.evaluate("y => window.scrollTo(0, y)", scroll)
             page.evaluate(NEXT_PAINT)
             tiles, grid = page.evaluate("""() => {
               const style = getComputedStyle(document.documentElement);
-              return [[...document.querySelectorAll('.tile')].map(n => { const b = n.getBoundingClientRect(); return [b.left + scrollX, b.top + scrollY]; }),
+              return [[...document.querySelectorAll('.tile, .dock .shell-swatch')].filter(n => n.offsetParent).map(n => { const b = n.getBoundingClientRect(); return [b.left + scrollX, b.top + scrollY]; }),
                       [parseFloat(style.getPropertyValue('--grid-x')), parseFloat(style.getPropertyValue('--grid-y'))]];
             }""")
             for left, top in tiles:
@@ -240,7 +242,7 @@ class ShelfTests(BrowserCase):
                 page.evaluate("on => setEditing(on)", editing)
                 page.click("#fitButton")
                 r = page.evaluate(RECTS)
-                under = r["dock"]["height"] + 14 if editing else r["edit"]["height"] + 12
+                under = (r["dock"] if editing else r["edit"])["height"] + 14
                 room = 1060 - r["bar"]["height"] - under - 32
                 filled = r["screens"]["height"] * 408 / 392 if editing else r["console"]["height"]
                 self.assertAlmostEqual(filled, room, delta=1)
@@ -289,6 +291,59 @@ class EditingTests(BrowserCase):
     def test_alt_places_freely(self):
         page = self.open(layout=two_boxes()[0])
         self.assertEqual(self.drag_cloud(page, -98, 0, alt=True)[:2], (2, 120))
+
+    def test_a_centre_half_a_pixel_away_is_no_snap_target(self):
+        layout, other = two_boxes()
+        next(e for e in layout["elements"] if e["id"] == other).update(x=20, y=60, w=51, h=30)   # Centre at 45.5
+        page = self.open(layout=layout)
+        # The cloud is 40 wide, so its centre can only be on a whole pixel: 46 isn't pulled to 45.5.
+        self.assertEqual(self.drag_cloud(page, -74, 0)[0], 26)
+
+    def test_typed_positions_are_whole_pixels(self):
+        page = self.open(layout=two_boxes()[0])
+        self.select(page, "cloud")
+        box = page.locator("#fields .grid4 input").first
+        box.fill("33.5")
+        box.press("Tab")
+        self.assertEqual(self.geometry(page, "cloud")[0], 34)
+
+    def test_several_elements_move_align_copy_and_delete_together(self):
+        layout, other = two_boxes()
+        next(e for e in layout["elements"] if e["id"] == other)["locked"] = False
+        page = self.open(layout=layout)
+        self.select(page, "cloud")
+        page.keyboard.down("Shift")
+        page.mouse.click(*self.ds_point(page, 30, 30))
+        page.keyboard.up("Shift")
+        self.assertEqual(page.evaluate("selection().map(e => e.id).sort()"), sorted(["cloud", other]))
+        self.assertEqual(page.locator(".box.selected").count(), 2)
+        self.assertEqual(page.locator(".handle").count(), 0)
+        self.assertEqual(page.text_content("#inspectorTitle"), "2 elements")
+
+        page.keyboard.press("ArrowRight")
+        self.assertEqual((self.geometry(page, "cloud")[0], self.geometry(page, other)[0]), (101, 21))
+        page.keyboard.down("Alt")       # No snapping, so the distance is known
+        self.drag(page, self.ds_point(page, 121, 150), self.ds_point(page, 131, 160))
+        page.keyboard.up("Alt")
+        self.assertEqual((self.geometry(page, "cloud")[:2], self.geometry(page, other)[:2]), ((111, 130), (31, 30)))
+        page.click("[data-align=left]")
+        self.assertEqual((self.geometry(page, "cloud")[0], self.geometry(page, other)[0]), (31, 31))
+        page.keyboard.press("Control+z")
+        self.assertEqual(self.geometry(page, "cloud")[0], 111)
+
+        page.keyboard.press("Control+d")
+        self.assertEqual(page.evaluate("layout.elements.length"), 4)
+        self.assertEqual(page.evaluate("selection().length"), 2)
+        self.assertEqual(sorted(page.evaluate("selection().map(e => [e.x, e.y])")), [[39, 38], [119, 138]])
+        page.keyboard.press("Delete")
+        self.assertEqual(page.evaluate("layout.elements.map(e => e.id).sort()"), sorted(["cloud", other]))
+
+    def test_one_element_lines_up_with_its_screen(self):
+        page = self.open(layout=two_boxes()[0])
+        self.select(page, "cloud")
+        page.click("[data-align=centre]")
+        page.click("[data-align=bottom]")
+        self.assertEqual(self.geometry(page, "cloud")[:2], (108, 156))
 
     def test_arrow_keys_nudge_the_selection(self):
         page = self.open(layout=two_boxes()[0])

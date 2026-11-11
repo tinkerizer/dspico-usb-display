@@ -4,15 +4,19 @@ There are three ways to change how the DS looks, from simplest to most work.
 
 | Change | How | Where |
 |---|---|---|
-| Everything on the DS | A theme: a folder with its layout, colours, images and sounds | The editor, or `themes/` folders |
+| Everything on the DS | A theme: a folder with its layout, colours and images | The editor, or `themes/` folders |
 | An element made of other elements | A template: a JSON file | `templates/` folder |
 | A new kind of drawing, such as a new graph | An element type: one Python file | `app/dsdash/elements/` |
 
 ## Themes
 
-A theme is the whole dashboard: its layout, colours, images, GIFs and sounds, in one folder. Two
-themes can look nothing alike, and a theme can be copied or shared as a folder. Themes don't share
-files: the same image in two themes is two copies.
+A theme is the whole dashboard: its layout, colours, images and GIFs, in one folder. Two themes can
+look nothing alike. Themes don't share files: the same image in two themes is two copies.
+
+**Export**, in the settings beside the DS, saves the active theme as a zip, and **Import** adds one
+from a zip. Only `theme.json` and images are taken from a zip, and a name that's taken gets a number.
+
+The editor's own buttons, icons and sounds are not part of a theme. They're in `app/dsdash/web/ui/`.
 
 ```
 classic/
@@ -21,7 +25,6 @@ classic/
   sleep/            the sleep screen's GIF
   background/       menu backgrounds
   battery/  grf/  quickmenu/  topbar/  ui/  volume/
-  sound/            the editor's sounds
 ```
 
 ```json
@@ -43,8 +46,9 @@ classic/
 ### Sleep screen
 
 When the app stops sending, as when the PC sleeps or the cable is pulled, the DS waits 5 seconds and
-then shows the sleep screen: black, with the theme's sleep GIF playing at its own brightness. It's set in the **DS
-theme** menu, under **When the PC sleeps**, and saved as you change it.
+then shows the sleep screen: black, with the theme's sleep GIF playing at its own brightness. It's
+set in the settings beside the DS, under **When the PC sleeps**, and saved as you change it.
+**Preview** there shows it in the page without sleeping the PC.
 
 - `file`: a GIF in the theme's folder, or `""` for just black. The GIF is cropped to what's drawn
   in it, ignoring its background colour, shrunk if it's bigger than a screen, and centred.
@@ -60,15 +64,28 @@ The app loads themes from two folders when it starts:
 
 Editing works on the active theme, and switching themes switches the layout too.
 
-- **Save as a new name**, in the **DS theme** menu, copies the whole active theme: layout, art and
-  uploads.
+- **Save copy** copies the whole active theme under a new name: layout, art and uploads.
 - **Changing a built-in theme** writes a copy of it to your folder, which is used from then on.
   **Reset** puts the original back.
 - **Delete** removes one of your themes, with its folder.
 
 `art:` paths, like `art:topbar/11.png` or `art:uploads/cat.gif`, come from the active theme's
-folder, as do the editor's own buttons, icons and sounds. Restart the app to pick up art you've
-changed outside the editor.
+folder. Restart the app to pick up art you've changed outside the editor.
+
+### What a theme can change
+
+- **Colours work on any theme.** `paper`, `ink`, `boost` and `lift` are applied to the finished
+  picture, whatever drew it: greys are mapped between ink and paper, and colours are brightened.
+  A theme with its own coloured art can leave them at white, black, 0 and 0, which changes nothing.
+- **`bar` belongs to the built-in art.** It picks one of the 16 `topbar/N.png` images, and is the
+  accent for elements whose colour is left at the default blue. A theme without those images
+  can ignore it.
+- **Some elements draw from fixed files** in the theme's folder, so a theme restyles them by
+  replacing the file at the same size: the analog clock's face and the calendar's grid from
+  `background/top.png`, today's marker from `ui/marker.png`, menu buttons from `grf/iconbox.png`,
+  and the top bar from `topbar/` and `battery/`.
+- **Everything else is the layout:** images, GIFs, text, bars and graphs go wherever the theme
+  puts them, with its own files.
 
 ## Templates
 

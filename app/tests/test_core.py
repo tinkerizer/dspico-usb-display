@@ -269,6 +269,27 @@ class LayoutTests(unittest.TestCase):
             layout.validate({"elements": [element]})
 
 
+class AlignmentTests(unittest.TestCase):
+    def test_boxes_sit_evenly_between_the_grid_lines(self):
+        """The bottom screen's grid has lines at 31, 79, 127, 175 and 223, and boxes keep a pixel clear of them."""
+        boxes = {e["id"]: e for e in layout.default_layout()["elements"] if e["type"] == "button"}
+        for box in boxes.values():
+            self.assertIn(box["x"], (33, 129))
+            self.assertIn(box["x"] + box["w"], (126, 222))
+
+    def test_old_layouts_get_the_default_boxes_put_right(self):
+        old = layout.default_layout()
+        old["version"] = 1
+        for element in old["elements"]:
+            if element["id"] == "card":
+                element["w"] = 190
+            if element["id"] == "disk_bar":
+                element.update(x=50, w=174)      # Moved by the user, so left alone
+        new = {e["id"]: e for e in layout.from_saved(old)["elements"]}
+        self.assertEqual(new["card"]["w"], 189)
+        self.assertEqual((new["disk_bar"]["x"], new["disk_bar"]["w"]), (50, 174))
+
+
 class TemplateTests(unittest.TestCase):
     def bar(self, **props):
         element = layout.validate({"elements": [{"id": "top_bar", "type": "top_bar", "x": 0, "y": 0, "w": 256, "h": 16,
@@ -440,12 +461,52 @@ class ThemeTests(unittest.TestCase):
         for name, folder in self.store.built_in.items():
             with self.subTest(name):
                 self.assertTrue((folder / "topbar" / "11.png").is_file())
-                self.assertTrue((folder / "sound" / "select.wav").is_file())
+                self.assertFalse((folder / "sound").exists(), "The page's own sounds and art aren't part of a theme")
         self.store.save("Mine", self.own)
         folder = self.store.custom["Mine"]
         self.assertEqual(folder, self.user_dir / "mine")
         self.assertTrue((folder / "topbar" / "11.png").is_file())
         self.assertEqual(json.loads((folder / "theme.json").read_text())["name"], "Mine")
+
+    def test_a_theme_can_be_exported_and_imported(self):
+        self.store.save("Mine", self.own)
+        (self.store.uploads_dir() / "cat.png").parent.mkdir(exist_ok=True)
+        Image.new("RGB", (2, 2)).save(self.store.uploads_dir() / "cat.png")
+        packed = self.store.export("Mine")
+        other = themes.ThemeStore(self.data / "elsewhere")
+        self.assertEqual(other.import_zip(packed), "Mine")
+        self.assertEqual((other.active_name, other.active), ("Mine", self.own))
+        self.assertTrue((other.folder / "uploads" / "cat.png").is_file())
+        self.assertEqual(other.layout, self.store.layout)
+        self.assertEqual(other.import_zip(packed), "Mine 2", "A taken name gets a number")
+
+    def test_an_import_can_only_write_images_inside_its_folder(self):
+        import io, zipfile
+        packed = io.BytesIO()
+        with zipfile.ZipFile(packed, "w") as archive:
+            archive.writestr("theme.json", json.dumps({"name": "Sneaky", **self.own}))
+            archive.writestr("../outside.png", b"x")
+            archive.writestr("uploads/run.exe", b"x")
+            archive.writestr("uploads/fine.png", b"x")
+        self.store.import_zip(packed.getvalue())
+        folder = self.store.custom["Sneaky"]
+        self.assertEqual(sorted(path.name for path in folder.rglob("*") if path.is_file()), ["fine.png", "theme.json"])
+        self.assertFalse((self.user_dir / "outside.png").exists())
+        for bad in (b"not a zip", b""):
+            with self.assertRaises(ValueError):
+                self.store.import_zip(bad)
+
+    def test_old_built_in_art_in_a_copy_is_replaced(self):
+        self.store.save("Mine", self.own)
+        file = self.store.custom["Mine"] / "quickmenu" / "topbg.png"
+        fixed = file.read_bytes()
+        with mock.patch.dict(themes.OLD_ART, {"quickmenu/topbg.png": __import__("hashlib").sha1(b"old").hexdigest()}):
+            file.write_bytes(b"old")
+            self.reopen()
+            self.assertEqual(file.read_bytes(), fixed)
+            file.write_bytes(b"my own")
+            self.reopen()
+            self.assertEqual(file.read_bytes(), b"my own", "Art the user changed is left alone")
 
     def test_art_comes_from_the_active_theme(self):
         self.store.save("Mine", self.own)
@@ -766,6 +827,37 @@ class RevisionTests(unittest.TestCase):
         self.assertEqual(self.call("GET", "/api/status")[1]["frame"], int(number))
         again, second = self.fetch("/api/frame.png")
         self.assertEqual((again.getheader("X-Frame"), second), (number, first))
+
+    def test_the_status_is_pushed_as_events(self):
+        client = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        self.addCleanup(client.close)
+        client.request("GET", "/api/events")
+        response = client.getresponse()
+        self.assertEqual(response.getheader("Content-Type"), "text/event-stream")
+        line = response.fp.readline()
+        self.assertTrue(line.startswith(b"data: "))
+        self.assertEqual(json.loads(line[6:])["layoutRevision"], self.app.revision)
+
+    def test_each_theme_has_a_picture_and_a_zip(self):
+        response, picture = self.fetch("/api/theme.png?name=Dark")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(Image.open(__import__("io").BytesIO(picture)).size, (128, 192))
+        self.assertEqual(layout.ART_DIR, self.app.themes.folder, "Drawing another theme leaves the active one's art in place")
+        response, packed = self.fetch("/api/theme.zip?name=Classic")
+        self.assertIn("Classic.zip", response.getheader("Content-Disposition"))
+        client = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        self.addCleanup(client.close)
+        client.request("POST", "/api/themes/import", packed)
+        listing = json.loads(client.getresponse().read())
+        self.assertEqual(listing["active"], "Classic 2")
+        self.assertEqual(self.fetch("/api/theme.png?name=Nope")[0].status, 404)
+
+    def test_the_sleep_screen_says_where_its_gif_goes(self):
+        listing = self.call("GET", "/api/themes")[1]
+        box = listing["sleepBox"]
+        self.assertEqual(box["x"], (256 - box["w"]) // 2)
+        self.assertLessEqual(box["y"] + box["h"], 192)
+        self.assertEqual(len(box["crop"]), 4)
 
     def test_colours_save_to_the_theme_without_touching_the_layout(self):
         before = self.app.revision

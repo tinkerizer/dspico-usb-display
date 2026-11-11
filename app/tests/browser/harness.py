@@ -200,10 +200,6 @@ class Watch:
 def prepare(context, frame=None):
     if frame:
         context.route("**/api/frame.png", lambda route: route.fulfill(body=frame, content_type="image/png"))
-    if not HAS_ART:
-        # These have no fallback in the server, which would just drop the connection.
-        context.route("**/ui/*", lambda route: route.fulfill(status=204))
-        context.route("**/sound/*", lambda route: route.fulfill(status=204))
 
 
 def new_page(width=1600, height=1000, dpr=1, motion=False, frame=None, script=None):
@@ -285,6 +281,8 @@ class BrowserCase(unittest.TestCase):
           layout = clean;
           revision = savedRevision;
           selectedId = null;
+          extraIds.clear();
+          setSleepPreview(false);
           undoStack = [];
           redoStack = [];
           keepBoxShape = jsonDirty = false;

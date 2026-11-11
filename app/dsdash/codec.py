@@ -170,11 +170,15 @@ def drawing_box(path: str) -> Rect:
     return box[0], box[1], box[2] - box[0], box[3] - box[1]
 
 
-def encode_sleep(path: str, screen: str) -> Tuple[Rect, List[Tuple[int, bytes]]]:
-    """A GIF for the sleep screen: cropped to its drawing, shrunk to fit if needed, and centred on a screen."""
+def sleep_box(path: str, screen: str) -> dict:
+    """Where the sleep screen's GIF goes: cropped to its drawing, shrunk to fit if needed, and centred on a screen."""
     crop = drawing_box(path)
     scale = min(1, WIDTH / crop[2], SCREEN_HEIGHT / crop[3])
     width, height = max(1, int(crop[2] * scale)), max(1, int(crop[3] * scale))
     top = SCREEN_HEIGHT if screen == "bottom" else 0
-    rect = ((WIDTH - width) // 2, top + (SCREEN_HEIGHT - height) // 2, width, height)
-    return encode_animation(path, rect, crop)
+    return {"x": (WIDTH - width) // 2, "y": top + (SCREEN_HEIGHT - height) // 2, "w": width, "h": height, "crop": list(crop)}
+
+
+def encode_sleep(path: str, screen: str) -> Tuple[Rect, List[Tuple[int, bytes]]]:
+    box = sleep_box(path, screen)
+    return encode_animation(path, (box["x"], box["y"], box["w"], box["h"]), tuple(box["crop"]))

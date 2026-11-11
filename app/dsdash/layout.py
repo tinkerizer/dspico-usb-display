@@ -2,6 +2,8 @@
 import os
 import re
 import sys
+import threading
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
 from typing import Dict, List
@@ -17,12 +19,26 @@ THEMES_DIR = ASSETS / "themes"
 ART_DIR = THEMES_DIR / "classic"    # The active theme's folder, which art: paths are in. themes.ThemeStore sets it.
 APP_DATA = Path(os.environ.get("LOCALAPPDATA", ".")) / "DSDisplay"
 LOCAL_DIR = APP_DATA / "data" if FROZEN else ASSETS / "local"
+ART_LOCK = threading.RLock()        # Held while drawing, and while ART_DIR changes
+
+
+@contextmanager
+def art_folder(folder: Path):
+    """Draws from another theme's folder for a moment, as its thumbnail needs."""
+    global ART_DIR
+    with ART_LOCK:
+        previous, ART_DIR = ART_DIR, folder
+        try:
+            yield
+        finally:
+            ART_DIR = previous
 
 WIDTH, HEIGHT = 256, 384
 PROFILE_COLOUR = "#005af6"  # Blue, matching topbar/11.png.
 MAX_ELEMENTS = 100
 MAX_ANIMATIONS = 8
 MAX_TEXT = 200
+VERSION = 2
 
 IMAGE_SUFFIXES = (".png", ".bmp", ".gif")
 
@@ -47,7 +63,7 @@ def gpu_panel_elements() -> list:
         _element("card_gpu", "text", 83, 222, 62, 12, text="GPU  {gpu}"),
         _element("card_temp", "temperature", 83, 234, 62, 12, text="TEMP "),
         _element("card_net", "text", 83, 246, 62, 12, text="NET  {net_down}", color="#0041c3"),
-        _element("gpu_graph", "graph", 147, 222, 72, 36, metric="gpu", color="#b3202a"),
+        _element("gpu_graph", "graph", 147, 222, 70, 35, metric="gpu", color="#b3202a"),
     ]
 
 
@@ -66,7 +82,7 @@ def corner_icon_elements() -> list:
 def default_layout() -> dict:
     """The DS home screen, laid out like the real menu and built from its art."""
     ink = "#424242"
-    return {"version": 1, "elements": [
+    return {"version": VERSION, "elements": [
         # Top screen: clock, calendar and the date, as on the real menu.
         _element("top_paper", "image", 0, 0, 256, 192, file="art:quickmenu/topbg.png", locked=True),
         _element("top_bar", "top_bar", 0, 0, 256, 16),
@@ -80,24 +96,24 @@ def default_layout() -> dict:
         _element("bottom_paper", "image", 0, 192, 256, 192, file="art:quickmenu/bottombg.png", locked=True),
         *corner_icon_elements(),
 
-        _element("card", "button", 33, 217, 190, 45),
+        _element("card", "button", 33, 217, 189, 45),
         _element("cloud", "animation", 36, 221, 40, 36),
         *gpu_panel_elements(),
 
         _element("cpu_button", "button", 33, 265, 93, 45),
         _element("cpu_label", "text", 39, 267, 40, 12, text="CPU"),
         _element("cpu_value", "text", 78, 267, 44, 12, text="{cpu}", align="right", color="#0041c3"),
-        _element("cpu_graph", "graph", 38, 281, 84, 26, metric="cpu", color="#0041c3"),
+        _element("cpu_graph", "graph", 38, 281, 83, 24, metric="cpu", color="#0041c3"),
 
         _element("ram_button", "button", 129, 265, 93, 45),
         _element("ram_label", "text", 135, 267, 40, 12, text="RAM"),
         _element("ram_value", "text", 174, 267, 44, 12, text="{ram}", align="right", color="#28aa3c"),
-        _element("ram_graph", "graph", 134, 281, 84, 26, metric="ram", color="#28aa3c"),
+        _element("ram_graph", "graph", 134, 281, 83, 24, metric="ram", color="#28aa3c"),
 
-        _element("disk_button", "button", 33, 313, 190, 45),
+        _element("disk_button", "button", 33, 313, 189, 45),
         _element("disk_label", "text", 39, 315, 40, 12, text="DISK", color=ink),
-        _element("disk_bar", "bar", 41, 336, 174, 10, metric="disk", color="#d30000"),
-        _element("disk_value", "text", 180, 315, 40, 12, text="{disk_free}", align="right"),
+        _element("disk_bar", "bar", 41, 336, 173, 10, metric="disk", color="#d30000"),
+        _element("disk_value", "text", 178, 315, 40, 12, text="{disk_free}", align="right"),
     ]}
 
 
@@ -191,7 +207,7 @@ def validate(layout: dict, lenient=False) -> dict:
 
     if sum(1 for element in clean if element["type"] == "animation" and not element["hidden"]) > MAX_ANIMATIONS:
         raise LayoutError(f"At most {MAX_ANIMATIONS} animations")
-    return {"version": 1, "elements": clean}
+    return {"version": VERSION, "elements": clean}
 
 
 LEGACY_TOP_BAR = ("top_bar", "bar_name", "bar_time", "bar_date", "bar_usb", "bar_battery")
@@ -230,10 +246,33 @@ def upgrade_uploads(layout: dict) -> dict:
     return layout
 
 
+# The boxes on the bottom screen were a pixel too wide for the grid behind them, and what's inside
+# them was off centre. Version 1 layouts get the default elements they haven't moved put right.
+MOVED_IN_2 = {
+    "card": ((33, 217, 190, 45), (33, 217, 189, 45)),
+    "disk_button": ((33, 313, 190, 45), (33, 313, 189, 45)),
+    "gpu_graph": ((147, 222, 72, 36), (147, 222, 70, 35)),
+    "cpu_graph": ((38, 281, 84, 26), (38, 281, 83, 24)),
+    "ram_graph": ((134, 281, 84, 26), (134, 281, 83, 24)),
+    "disk_bar": ((41, 336, 174, 10), (41, 336, 173, 10)),
+    "disk_value": ((180, 315, 40, 12), (178, 315, 40, 12)),
+}
+
+
+def upgrade_alignment(layout: dict) -> dict:
+    if layout.get("version", 1) >= 2:
+        return layout
+    for element in layout.get("elements", []):
+        old, new = MOVED_IN_2.get(element.get("id"), (None, None))
+        if old and tuple(element.get(key) for key in "xywh") == old:
+            element.update(zip("xywh", new))
+    return layout
+
+
 def from_saved(layout) -> dict:
     """A theme's layout, from its file. A bad one gives the default, as it shouldn't stop the display."""
     try:
-        return validate(upgrade_top_bar(upgrade_uploads(deepcopy(layout))), lenient=True)
+        return validate(upgrade_alignment(upgrade_top_bar(upgrade_uploads(deepcopy(layout)))), lenient=True)
     except (LayoutError, TypeError, AttributeError):
         return validate(default_layout())
 

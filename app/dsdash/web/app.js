@@ -16,8 +16,11 @@ const spring = { type: "spring", bounce: 0.35, duration: 0.4 };
 
 let layout = { elements: [] }, catalog = { schema: {}, files: [], tokens: [] };
 let selectedId = null, undoStack = [], redoStack = [];
+const extraIds = new Set();     // The rest of a selection of several. selectedId is the one last picked.
 let saveTimer = null, saving = false, saveAgain = false, brightnessReady = false;
 let revision = 0, unsaved = false, writing = 0, lastWrite = Promise.resolve(), pulling = false;
+let dsThemes = null, dsTheme = null, dsThemeTimer = null;
+let colourUndo = [], colourUndoAt = 0, sleepPreview = false;
 const collapsedLayers = new Set();
 try { JSON.parse(localStorage.getItem("collapsedLayers") || "[]").forEach(id => collapsedLayers.add(id)); } catch {}
 let frameUrl = null, frameLoading = false, frameWanted = false, refreshing = false;
@@ -25,6 +28,9 @@ let shownFrame = null;      // The X-Frame number of the picture on show
 let keepBoxShape = false, jsonDirty = false, soundOn = true, openMenu = null;
 
 const selected = () => layout.elements.find(e => e.id === selectedId);
+const isSelected = id => id === selectedId || extraIds.has(id);
+const selection = () => layout.elements.filter(e => isSelected(e.id));
+const whole = value => Math.round(Number(value)) || 0;      // The DS has no half pixels.
 const clone = value => JSON.parse(JSON.stringify(value));
 const fileUrl = reference => `/api/file/${encodeURIComponent(reference)}`;
 const canCrop = element => element.type === "image" || element.type === "animation";
@@ -37,9 +43,26 @@ function pop(node, from = 0.9) {
 
 const play = name => Effects.play(name);
 
+// Icons drawn here as pixels, in the text colour, so they suit any page colours.
+const PIXELS = {
+  sun: [".....#.....", ".#...#...#.", "..#.....#..", "....###....", "...#####...", "##.#####.##",
+        "...#####...", "....###....", "..#.....#..", ".#...#...#.", ".....#....."],
+  moon: ["...####....", "..####.....", ".####......", ".###.......", "####.......", "####.......",
+         "####......#", ".####....##", ".#########.", "..#######..", "...#####..."],
+};
+
+function pixelIcon(name) {
+  const rows = PIXELS[name];
+  const dots = rows.flatMap((row, y) => [...row].map((dot, x) => dot === "#" ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ""));
+  return `<svg viewBox="0 0 ${rows[0].length} ${rows.length}" fill="currentColor" shape-rendering="crispEdges" aria-hidden="true">${dots.join("")}</svg>`;
+}
+
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  $("themeButton").textContent = theme === "dark" ? "Light" : "Dark";
+  $("themeButton").innerHTML = pixelIcon(theme === "dark" ? "moon" : "sun");
+  const label = theme === "dark" ? "Dark mode. Switch to light" : "Light mode. Switch to dark";
+  $("themeButton").title = label;
+  $("themeButton").setAttribute("aria-label", label);
 }
 
 function setSound(on) {
@@ -166,7 +189,6 @@ function restore(from, to) {
   if (!from.length) return;
   to.push(clone(layout));
   layout = from.pop();
-  if (!selected()) selectedId = null;
   updateHistoryButtons();
   renderAll();
   saveSoon();
@@ -258,11 +280,64 @@ function addElement(type, props = {}) {
 function removeSelected() {
   if (!selected()) return;
   remember();
-  layout.elements = layout.elements.filter(e => e.id !== selectedId);
+  layout.elements = layout.elements.filter(e => !isSelected(e.id));
   selectedId = null;
   renderAll();
   saveSoon();
   play("back");
+}
+
+function duplicateSelected() {
+  const originals = selection();
+  if (!originals.length) return;
+  remember();
+  const copies = originals.map(original => {
+    const copy = { ...clone(original), id: uniqueId(original.type), locked: false };
+    copy.x += 8;
+    copy.y += 8;
+    layout.elements.push(copy);
+    return copy.id;
+  });
+  selectedId = copies.pop();
+  extraIds.clear();
+  copies.forEach(id => extraIds.add(id));
+  renderAll();
+  saveSoon();
+  play("select");
+}
+
+// Changes everything selected in one undo step.
+function changeAll(mutate) {
+  if (!selected()) return;
+  remember();
+  selection().forEach(mutate);
+  renderAll();
+  saveSoon();
+}
+
+// One element lines up with the screen it's on, and several line up with each other.
+function align(edge) {
+  const items = selection().filter(e => !e.locked);
+  if (!items.length) return;
+  let box;
+  if (items.length === 1) {
+    box = { x: 0, y: items[0].y + items[0].h / 2 >= SEAM ? SEAM : 0, w: W, h: SEAM };
+  } else {
+    const x = Math.min(...items.map(e => e.x)), y = Math.min(...items.map(e => e.y));
+    box = { x, y, w: Math.max(...items.map(e => e.x + e.w)) - x, h: Math.max(...items.map(e => e.y + e.h)) - y };
+  }
+  remember();
+  for (const e of items) {
+    if (edge === "left") e.x = box.x;
+    if (edge === "centre") e.x = box.x + Math.floor((box.w - e.w) / 2);
+    if (edge === "right") e.x = box.x + box.w - e.w;
+    if (edge === "top") e.y = box.y;
+    if (edge === "middle") e.y = box.y + Math.floor((box.h - e.h) / 2);
+    if (edge === "bottom") e.y = box.y + box.h - e.h;
+  }
+  renderAll();
+  saveSoon();
+  play("select");
 }
 
 function moveInOrder(step) {
@@ -344,7 +419,7 @@ function placeHandle(node, e) {
 }
 
 function renderAnimations() {
-  const wanted = layout.elements.filter(e => e.type === "animation" && !e.hidden);
+  const wanted = sleepPreview ? sleepElements() : layout.elements.filter(e => e.type === "animation" && !e.hidden);
   const [top, bottom] = document.querySelectorAll(".animations");
   top.replaceChildren(...wanted.filter(e => e.y < SEAM).map(animationView));
   bottom.replaceChildren(...wanted.filter(e => e.y + e.h > SEAM).map(animationView));
@@ -376,9 +451,9 @@ function renderOverlay() {
     box.className = "box";
     box.dataset.id = e.id;
     box.classList.toggle("locked", e.locked);
-    box.classList.toggle("selected", e.id === selectedId);
+    box.classList.toggle("selected", isSelected(e.id));
     placeHandle(box, e);
-    if (e.id === selectedId && !e.locked && !catalog.schema[e.type].fixed_size) {
+    if (e.id === selectedId && !extraIds.size && !e.locked && !catalog.schema[e.type].fixed_size) {
       for (const corner of ["nw", "ne", "sw", "se"]) {
         const handle = document.createElement("div");
         handle.className = `handle ${corner}`;
@@ -412,7 +487,7 @@ function layerRow(e, depth, hasChildren) {
   const row = document.createElement("div");
   row.className = "item";
   row.classList.toggle("top", depth === 0);
-  row.classList.toggle("selected", e.id === selectedId);
+  row.classList.toggle("selected", isSelected(e.id));
   row.classList.toggle("hidden", e.hidden);
   row.dataset.id = e.id;
   row.style.setProperty("--depth", depth);
@@ -439,7 +514,7 @@ function layerRow(e, depth, hasChildren) {
   type.className = "type";
   type.textContent = catalog.schema[e.type].label;
   row.append(twisty, name, type);
-  row.addEventListener("click", () => select(e.id));
+  row.addEventListener("click", event => select(e.id, event.shiftKey || event.ctrlKey || event.metaKey));
   return row;
 }
 
@@ -505,7 +580,7 @@ function propControl(element, prop) {
     input.value = element.props[prop.key];
   }
   input.addEventListener("change", () => {
-    const value = prop.kind === "number" ? Number(input.value) || 0 : input.value;
+    const value = prop.kind === "number" ? whole(input.value) : input.value;
     change(e => { e.props[prop.key] = value; });
     if (prop.kind === "file") renderInspector();
   });
@@ -535,20 +610,63 @@ function renderInspector() {
 
   const wasHidden = inspector.hidden;
   const schema = catalog.schema[element.type];
-  $("inspectorTitle").textContent = `${schema.label}: ${element.id}`;
+  const several = extraIds.size > 0;
+  $("inspectorTitle").textContent = several ? `${extraIds.size + 1} elements` : `${schema.label}: ${element.id}`;
   fields.replaceChildren();
+
+  const action = (text, onClick, title, danger) => {
+    const button = document.createElement("button");
+    button.className = "ds-button";
+    if (danger) button.style.color = "var(--red)";
+    button.textContent = text;
+    if (title) button.title = title;
+    button.addEventListener("click", onClick);
+    return button;
+  };
+  const toggle = key => () => { const on = !element[key]; changeAll(e => { e[key] = on; }); };
+  const actions = document.createElement("div");
+  actions.className = "row";
+  actions.append(action(element.hidden ? "Show" : "Hide", toggle("hidden")),
+                 action(element.locked ? "Unlock" : "Lock", toggle("locked")),
+                 action("Copy", duplicateSelected, "Duplicate (Ctrl+D)"),
+                 action("Delete", removeSelected, "Delete (Del)", true));
+  const aligning = document.createElement("div");
+  aligning.className = "chips align";
+  for (const edge of ["left", "centre", "right", "top", "middle", "bottom"]) {
+    const button = document.createElement("button");
+    button.textContent = edge[0].toUpperCase() + edge.slice(1);
+    button.dataset.align = edge;
+    button.disabled = selection().every(e => e.locked);
+    button.addEventListener("click", () => align(edge));
+    aligning.append(button);
+  }
+  const alignTitle = document.createElement("div");
+  alignTitle.className = "field";
+  alignTitle.textContent = several ? "Line up with each other" : "Line up with the screen";
+
+  if (several) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Shift+click adds or removes one. Drag or the arrow keys move them together.";
+    fields.append(alignTitle, aligning, hint, actions);
+    inspector.hidden = false;
+    placeInspector();
+    if (wasHidden) pop(inspector);
+    return;
+  }
 
   const geometry = document.createElement("div");
   geometry.className = "grid4";
   for (const key of ["x", "y", "w", "h"]) {
     const input = document.createElement("input");
     input.type = "number";
+    input.step = 1;
     input.value = element[key];
     input.disabled = Boolean(schema.fixed_size) && (key === "w" || key === "h");
-    input.addEventListener("change", () => change(e => { e[key] = Number(input.value) || 0; }));
+    input.addEventListener("change", () => { change(e => { e[key] = whole(input.value); }); input.value = element[key]; });
     geometry.append(field(key.toUpperCase(), input));
   }
-  fields.append(geometry);
+  fields.append(geometry, alignTitle, aligning);
 
   for (const prop of schema.props) {
     if (prop.key.startsWith("crop_")) continue;   // Edited with the cropper below
@@ -573,20 +691,6 @@ function renderInspector() {
 
   if (canCrop(element)) fields.append(buildCropper(element));
 
-  const actions = document.createElement("div");
-  actions.className = "row";
-  const action = (text, onClick, danger) => {
-    const button = document.createElement("button");
-    button.className = "ds-button";
-    if (danger) button.style.color = "var(--red)";
-    button.textContent = text;
-    button.addEventListener("click", onClick);
-    return button;
-  };
-  const toggle = key => () => { change(e => { e[key] = !e[key]; }); renderInspector(); };
-  actions.append(action(element.hidden ? "Show" : "Hide", toggle("hidden")),
-                 action(element.locked ? "Unlock" : "Lock", toggle("locked")),
-                 action("Delete", removeSelected, true));
   fields.append(actions);
 
   inspector.hidden = false;
@@ -856,15 +960,25 @@ function revealSelected() {
 }
 
 function renderAll() {
+  for (const id of [...extraIds]) if (!layout.elements.some(e => e.id === id)) extraIds.delete(id);
+  if (!selected()) { selectedId = extraIds.values().next().value ?? null; extraIds.delete(selectedId); }
   renderOverlay();
   renderList();
   renderInspector();
   renderJson();
 }
 
-function select(id) {
+// `add` is a shift+click: it adds the element to the selection, or takes it out.
+function select(id, add = false) {
   if (id && !editing) setEditing(true);
   if (id !== selectedId) play(id ? "select" : "back");
+  if (add && id && selectedId) {
+    if (extraIds.delete(id)) id = selectedId;
+    else if (id === selectedId) { id = extraIds.values().next().value ?? null; extraIds.delete(id); }
+    else extraIds.add(selectedId);
+  } else {
+    extraIds.clear();
+  }
   selectedId = id;
   // Open the branches above it, so it's visible in the list.
   const parents = parentsOf(layout.elements);
@@ -913,10 +1027,10 @@ function showDrawer(tab) {
 // Edges and centres pull to the screens' and other elements' edges and centres. Alt places freely.
 const SNAP = 4;
 
-function snapTargets(skipId) {
+function snapTargets() {
   const xs = [0, W / 2, W], ys = [0, SEAM / 2, SEAM, SEAM * 1.5, H];
   for (const e of layout.elements) {
-    if (e.id === skipId || e.hidden) continue;
+    if (isSelected(e.id) || e.hidden) continue;
     xs.push(e.x, e.x + e.w / 2, e.x + e.w);
     ys.push(e.y, e.y + e.h / 2, e.y + e.h);
   }
@@ -928,7 +1042,8 @@ function nearest(values, targets) {
   for (const value of values) {
     for (const target of targets) {
       const shift = target - value;
-      if (Math.abs(shift) <= SNAP && (!best || Math.abs(shift) < Math.abs(best.shift))) best = { shift, at: target };
+      // A centre half a pixel away can't be reached, so it's no target.
+      if (Number.isInteger(shift) && Math.abs(shift) <= SNAP && (!best || Math.abs(shift) < Math.abs(best.shift))) best = { shift, at: target };
     }
   }
   return best;
@@ -948,9 +1063,9 @@ function showGuides(guides) {
 function snapMove(live, targets) {
   const guides = [];
   const x = nearest([live.x, live.x + live.w / 2, live.x + live.w], targets.xs);
-  if (x) { live.x = Math.round(live.x + x.shift); guides.push({ axis: "x", at: x.at }); }
+  if (x) { live.x += x.shift; guides.push({ axis: "x", at: x.at }); }
   const y = nearest([live.y, live.y + live.h / 2, live.y + live.h], targets.ys);
-  if (y) { live.y = Math.round(live.y + y.shift); guides.push({ axis: "y", at: y.at }); }
+  if (y) { live.y += y.shift; guides.push({ axis: "y", at: y.at }); }
   return guides;
 }
 
@@ -958,14 +1073,14 @@ function snapResize(live, corner, targets) {
   const guides = [];
   const x = nearest([corner.includes("e") ? live.x + live.w : live.x], targets.xs);
   if (x) {
-    const shift = Math.round(x.shift);
+    const shift = x.shift;
     if (corner.includes("e")) live.w = Math.max(1, live.w + shift);
     else { live.x += shift; live.w = Math.max(1, live.w - shift); }
     guides.push({ axis: "x", at: x.at });
   }
   const y = nearest([corner.includes("s") ? live.y + live.h : live.y], targets.ys);
   if (y) {
-    const shift = Math.round(y.shift);
+    const shift = y.shift;
     if (corner.includes("s")) live.h = Math.max(1, live.h + shift);
     else { live.y += shift; live.h = Math.max(1, live.h - shift); }
     guides.push({ axis: "y", at: y.at });
@@ -976,19 +1091,30 @@ function snapResize(live, corner, targets) {
 overlay.addEventListener("pointerdown", event => {
   closeMenu();
   const box = event.target.closest(".box");
-  if (!box) { select(null); return; }
-  event.preventDefault();
-
+  const adding = event.shiftKey || event.ctrlKey || event.metaKey;
   const corner = event.target.dataset.corner;
-  if (box.dataset.id !== selectedId) select(box.dataset.id);
+  if (!box) { if (!adding) select(null); return; }
+  event.preventDefault();
+  if (adding && !corner) { select(box.dataset.id, true); return; }
+
+  if (extraIds.has(box.dataset.id)) {
+    // Dragging one of several moves them all, and it becomes the one snapping is measured from.
+    extraIds.add(selectedId);
+    extraIds.delete(box.dataset.id);
+    selectedId = box.dataset.id;
+    renderAll();
+  } else if (box.dataset.id !== selectedId) {
+    select(box.dataset.id);
+  }
   const element = selected();
   const start = { x: element.x, y: element.y, w: element.w, h: element.h };
+  const others = selection().filter(e => e !== element && !e.locked).map(e => ({ id: e.id, x: e.x, y: e.y }));
   const origin = { x: event.clientX, y: event.clientY };
   const bounds = screens.getBoundingClientRect();
   const unit = bounds.width / W;
   const rowAt = clientY => fromView((clientY - bounds.top) / unit);
   const startRow = rowAt(event.clientY);
-  const targets = snapTargets(element.id);
+  const targets = snapTargets();
   let moved = false;
 
   const onMove = moveEvent => {
@@ -1021,6 +1147,14 @@ overlay.addEventListener("pointerdown", event => {
       live.x = start.x + dx;
       live.y = start.y + dy;
       showGuides(moveEvent.altKey ? [] : snapMove(live, targets));
+      for (const other of others) {
+        const follower = layout.elements.find(e => e.id === other.id);
+        if (!follower) continue;
+        follower.x = other.x + live.x - start.x;
+        follower.y = other.y + live.y - start.y;
+        const followerNode = overlay.querySelector(`[data-id="${CSS.escape(follower.id)}"]`);
+        if (followerNode) placeHandle(followerNode, follower);
+      }
     }
     const node = overlay.querySelector(`[data-id="${CSS.escape(live.id)}"]`);
     if (node) placeHandle(node, live);
@@ -1044,22 +1178,39 @@ document.addEventListener("keydown", event => {
     if (openMenu) closeMenu(); else if (selectedId) select(null); else if (editing) { play("back"); setEditing(false); }
     return;
   }
-  if (event.target.matches("input, select, textarea")) return;
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+  // Typing goes to the box being typed in. Sliders and colour pickers take no typing.
+  if (event.target.matches("select, textarea, input:not([type=range], [type=color], [type=checkbox])") || !$("modal").hidden) return;
+  const key = event.key.toLowerCase(), command = event.ctrlKey || event.metaKey;
+  if (command && key === "z") {
     event.preventDefault();
-    if (event.shiftKey) restore(redoStack, undoStack); else restore(undoStack, redoStack);
+    // In the preview there's no layout editing to undo, only the theme's colours.
+    if (!editing) undoColours();
+    else if (event.shiftKey) restore(redoStack, undoStack); else restore(undoStack, redoStack);
     return;
   }
-  const element = selected();
-  if (!element) return;
+  if (command && key === "d" && editing) { event.preventDefault(); duplicateSelected(); return; }
+  if (command && key === "a" && editing) {
+    event.preventDefault();
+    const all = layout.elements.filter(e => !e.hidden && !e.locked).map(e => e.id);
+    extraIds.clear();
+    all.forEach(id => extraIds.add(id));
+    selectedId = all.pop() ?? null;
+    extraIds.delete(selectedId);
+    renderAll();
+    return;
+  }
+  if (!command && !event.altKey) {
+    if (key === "e") { play(editing ? "back" : "launch"); setEditing(!editing); return; }
+    if (key === "l" || key === "j") { if (!editing) setEditing(true); showDrawer(key === "l" ? "layers" : "json"); return; }
+  }
+  if (!selected()) return;
   if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); removeSelected(); return; }
 
   const step = event.shiftKey ? 8 : 1;
   const move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
-  if (!move || element.locked) return;
+  if (!move || selection().every(e => e.locked)) return;
   event.preventDefault();
-  change(e => { e.x += move[0]; e.y += move[1]; });
-  renderInspector();
+  changeAll(e => { if (!e.locked) { e.x += move[0]; e.y += move[1]; } });
 });
 
 document.addEventListener("pointerdown", event => {
@@ -1124,6 +1275,7 @@ $("upload").addEventListener("change", async event => {
 let brightnessTimer = null;
 $("brightness").addEventListener("input", () => {
   $("brightnessValue").textContent = `${$("brightness").value}%`;
+  showDim();
   clearTimeout(brightnessTimer);
   brightnessTimer = setTimeout(() => api("/api/brightness", {
     method: "POST", body: JSON.stringify({ level: Number($("brightness").value) }),
@@ -1172,7 +1324,7 @@ function fitPreview() {
   const bar = document.querySelector(".topbar").offsetHeight;
   document.documentElement.style.setProperty("--bar", `${bar}px`);
   // Under the DS: the tools in the editor, or the button that opens it.
-  const under = editing ? document.querySelector(".dock") : $("editButton");
+  const under = document.querySelector(editing ? ".edit-dock" : ".view-dock");
   const tools = under.offsetHeight + parseFloat(getComputedStyle(under).marginTop);
   const room = window.innerHeight - bar - tools - MARGIN * 2;
   const ratio = window.devicePixelRatio || 1;
@@ -1197,7 +1349,7 @@ function fitPreview() {
   shell.style.transform = `translateX(${snap(left)}px)`;
 
   // The page's grid is anchored to the tools, which sit 2px in from their grid lines.
-  const firstTool = document.querySelector(".tile").getBoundingClientRect();
+  const firstTool = under.querySelector(".tile").getBoundingClientRect();
   if (firstTool.width) {
     document.documentElement.style.setProperty("--grid-x", `${firstTool.left + window.scrollX - 2}px`);
     document.documentElement.style.setProperty("--grid-y", `${firstTool.top + window.scrollY - 2}px`);
@@ -1214,8 +1366,8 @@ function showScreens() {
 
 // Measured in DS pixels from each shell's SVG. x and y are where its top screen sits.
 const SHELLS = {
-  lite: { file: "/web/shell.svg", width: 552, height: 575, x: 148, y: 42, hinge: 101, radius: "0" },
-  dsi: { file: "/web/shell-dsi.svg", width: 531, height: 544, x: 138, y: 34, hinge: 92, radius: "0" },
+  lite: { name: "DS Lite", file: "/web/shell.svg", width: 552, height: 575, x: 148, y: 42, hinge: 101, radius: "0" },
+  dsi: { name: "DSi", file: "/web/shell-dsi.svg", width: 531, height: 544, x: 138, y: 34, hinge: 92, radius: "0" },
 };
 
 // The editor: no shell, just the two screens with a small gap.
@@ -1224,7 +1376,7 @@ let shellModel = "lite", editing = false, fill = false;
 
 async function setShellModel(name) {
   shellModel = name;
-  for (const button of $("shellModels").children) button.setAttribute("aria-pressed", String(button.dataset.model === name));
+  $("shellModelName").textContent = SHELLS[name].name;
   try { localStorage.setItem("shellModel", name); } catch {}
   await applyShell();
 }
@@ -1232,7 +1384,7 @@ async function setShellModel(name) {
 function setEditing(on) {
   if (on === editing) return;
   editing = on;
-  if (!on) select(null);
+  if (on) setSleepPreview(false); else select(null);
   document.documentElement.classList.toggle("editing", on);
   applyShell();
 }
@@ -1267,9 +1419,7 @@ async function applyShell() {
   if (!editing && shell === SHELLS[shellModel]) $("shellArt").innerHTML = await response.text();
 }
 
-for (const button of $("shellModels").children) {
-  button.addEventListener("click", () => { play("select"); setShellModel(button.dataset.model); });
-}
+$("shellModel").addEventListener("click", () => { play("select"); setShellModel(shellModel === "lite" ? "dsi" : "lite"); });
 
 let savedModel = null;
 try { savedModel = localStorage.getItem("shellModel"); fill = localStorage.getItem("fill") === "1"; localStorage.removeItem("screensOnly"); } catch {}
@@ -1295,7 +1445,7 @@ const SHELL_COLOURS = {
 const STYLUS_TIP = "0 63";
 const stylusArt = new Image();
 stylusArt.onload = () => tintStylus($("shellColour").value);
-stylusArt.src = "/art/ui/stylus.png";
+stylusArt.src = "/web/ui/stylus.png";
 
 function stylusImage(shade, brightness, size) {
   const canvas = document.createElement("canvas");
@@ -1356,6 +1506,7 @@ function setShellColour(colour) {
   root.setProperty("--ds-color", colour);
   root.setProperty("--ds-label", pale ? "#3d3d3d" : "#e8e8e8");
   $("shellColour").value = colour;
+  $("shellColour").style.borderColor = Object.values(SHELL_COLOURS).includes(colour) ? "" : "var(--blue)";
   tintStylus(colour);
   for (const swatch of $("swatches").children) swatch.setAttribute("aria-pressed", String(swatch.dataset.colour === colour));
   try { localStorage.setItem("shellColour", colour); } catch {}
@@ -1378,29 +1529,33 @@ try { savedShell = localStorage.getItem("shellColour"); } catch {}
 setShellColour(/^#[0-9a-f]{6}$/i.test(savedShell) ? savedShell : SHELL_COLOURS.Black);
 setTheme(document.documentElement.dataset.theme || "light");
 
-// DS themes. Edits show on the DS straight away, and only stick when saved.
+// DS themes. Changes are saved to the active theme as they're made, and show on the DS straight away.
 
-let dsThemes = null, dsTheme = null, dsThemeTimer = null;
 
 async function changeDsTheme(request) {
+  const post = () => request.zip
+    ? api("/api/themes/import", { method: "POST", body: request.zip })
+    : api("/api/themes", { method: "POST", body: JSON.stringify(request) });
   if (request.action === "colours" || request.action === "sleep") {
-    dsThemes = await api("/api/themes", { method: "POST", body: JSON.stringify(request) });
+    dsThemes = await post();
     renderThemeList();
+    if (sleepPreview) renderAnimations();
     refreshFrame();
     return;
   }
   // Each theme has its own layout: save this one's last edit, then load the next one's.
-  pulling = true;     // Keeps the status poll from pulling it halfway
+  pulling = true;     // Keeps a status update from pulling it halfway
   try {
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; await save(); }
     await lastWrite;
-    dsThemes = await api("/api/themes", { method: "POST", body: JSON.stringify(request) });
+    dsThemes = await post();
     const latest = await send("/api/layout");
     layout = latest.body;
     revision = latest.revision;
     unsaved = false;
     undoStack = [];
     redoStack = [];
+    colourUndo = [];
     selectedId = null;
     updateHistoryButtons();
     renderAll();
@@ -1410,58 +1565,56 @@ async function changeDsTheme(request) {
   }
 }
 
-// One card per theme, each a small DS in that theme's colours.
+// One card per theme, with a picture of it. Cards are kept between changes, so their pictures don't flicker.
 function renderThemeList() {
-  $("dsThemeList").replaceChildren(...Object.entries(dsThemes.themes).map(([name, theme]) => {
-    const card = document.createElement("button");
-    card.className = "theme-card";
-    card.setAttribute("role", "option");
+  const list = $("dsThemeList");
+  const old = new Map([...list.children].map(card => [card.dataset.theme, card]));
+  list.replaceChildren(...Object.keys(dsThemes.themes).map(name => {
+    let card = old.get(name);
+    if (!card) {
+      card = document.createElement("button");
+      card.className = "theme-card";
+      card.setAttribute("role", "option");
+      card.dataset.theme = name;
+      const picture = document.createElement("img");
+      picture.alt = "";
+      picture.width = 128;
+      picture.height = 192;
+      const caption = document.createElement("span");
+      caption.className = "caption";
+      const label = document.createElement("span");
+      label.className = "name";
+      label.textContent = name;
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      caption.append(label, tag);
+      card.append(picture, caption);
+      card.addEventListener("click", async () => {
+        if (name === dsThemes.active) return;
+        play("select");
+        try {
+          await changeDsTheme({ action: "use", name });
+          showDsTheme(dsThemes.active);
+        } catch (error) { toast(error.message, true); }
+      });
+    }
     card.setAttribute("aria-selected", String(name === dsThemes.active));
-    card.dataset.theme = name;
-    const chip = document.createElement("span");
-    chip.className = "theme-chip";
-    chip.style.setProperty("--chip-paper", theme.paper);
-    chip.style.setProperty("--chip-ink", theme.ink);
-    chip.style.setProperty("--chip-bar", dsThemes.colours[theme.bar]);
-    const label = document.createElement("span");
-    label.className = "name";
-    label.textContent = name;
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    tag.textContent = !dsThemes.builtIn.includes(name) ? "yours" : dsThemes.edited.includes(name) ? "changed" : "";
-    card.append(chip, label, tag);
-    card.addEventListener("click", async () => {
-      if (name === dsThemes.active) return;
-      play("select");
-      try {
-        await changeDsTheme({ action: "use", name });
-        showDsTheme(dsThemes.active);
-      } catch (error) { toast(error.message, true); }
-    });
+    card.querySelector(".tag").textContent = !dsThemes.builtIn.includes(name) ? "yours" : dsThemes.edited.includes(name) ? "changed" : "";
+    const source = `/api/theme.png?name=${encodeURIComponent(name)}&v=${dsThemes.stamps[name]}`;
+    const picture = card.querySelector("img");
+    if (picture.getAttribute("src") !== source) picture.src = source;
     return card;
   }));
 }
 
-function showDsTheme(name) {
-  dsTheme = { ...dsThemes.themes[name] };
-  renderThemeList();
+function showColours() {
   $("dsThemePaper").value = dsTheme.paper;
   $("dsThemeInk").value = dsTheme.ink;
   $("dsThemeBoost").value = dsTheme.boost;
   $("dsThemeBoostValue").textContent = `${dsTheme.boost}%`;
   $("dsThemeLift").value = dsTheme.lift;
   $("dsThemeLiftValue").textContent = `${dsTheme.lift}%`;
-  const builtIn = dsThemes.builtIn.includes(name);
-  $("dsThemeDelete").disabled = builtIn && !dsThemes.edited.includes(name);
-  $("dsThemeDelete").textContent = builtIn ? `Reset ${name}` : `Delete ${name}`;
-  const sleep = dsThemes.sleep;
-  $("sleepFile").replaceChildren(new Option("Black screen", ""),
-    ...dsThemes.gifs.map(file => new Option(file.split("/").pop().replace(/\.gif$/i, "").replaceAll("_", " "), file)));
-  $("sleepFile").value = sleep.file;
-  $("sleepScreen").value = sleep.screen;
-  $("sleepScreen").disabled = !sleep.file;
-  $("sleepBrightness").value = sleep.brightness;
-  $("sleepBrightnessValue").textContent = `${sleep.brightness}%`;
+  $("dsThemeUndo").disabled = !colourUndo.length;
   $("dsThemeBars").replaceChildren(...dsThemes.colours.map((colour, index) => {
     const swatch = document.createElement("button");
     swatch.className = "shell-swatch";
@@ -1470,15 +1623,54 @@ function showDsTheme(name) {
     swatch.setAttribute("aria-pressed", String(index === dsTheme.bar));
     swatch.addEventListener("click", () => {
       play("select");
+      rememberColours();
       dsTheme.bar = index;
-      for (const other of $("dsThemeBars").children) other.setAttribute("aria-pressed", String(other === swatch));
+      showColours();
       previewDsTheme();
     });
     return swatch;
   }));
 }
 
-// Colours are saved to the active theme as they change, like the layout is.
+function showDsTheme(name) {
+  dsTheme = { ...dsThemes.themes[name] };
+  renderThemeList();
+  showColours();
+  const builtIn = dsThemes.builtIn.includes(name);
+  $("dsThemeDelete").disabled = builtIn && !dsThemes.edited.includes(name);
+  $("dsThemeDelete").textContent = builtIn ? `Reset ${name}` : `Delete ${name}`;
+  $("dsThemeExport").href = `/api/theme.zip?name=${encodeURIComponent(name)}`;
+  const sleep = dsThemes.sleep;
+  $("sleepFile").replaceChildren(new Option("Black screen", ""),
+    ...dsThemes.gifs.map(file => new Option(file.split("/").pop().replace(/\.gif$/i, "").replaceAll("_", " "), file)));
+  $("sleepFile").value = sleep.file;
+  $("sleepScreen").value = sleep.screen;
+  $("sleepScreen").disabled = !sleep.file;
+  $("sleepBrightness").value = sleep.brightness;
+  $("sleepBrightnessValue").textContent = `${sleep.brightness}%`;
+  showDim();
+  if (sleepPreview) renderAnimations();
+}
+
+// A drag of a slider or of the colour picker is one step to undo, not hundreds.
+function rememberColours() {
+  if (Date.now() - colourUndoAt > 600) {
+    colourUndo.push({ ...dsTheme });
+    if (colourUndo.length > 50) colourUndo.shift();
+  }
+  colourUndoAt = Date.now();
+  $("dsThemeUndo").disabled = false;
+}
+
+function undoColours() {
+  if (!colourUndo.length) return;
+  dsTheme = colourUndo.pop();
+  colourUndoAt = 0;
+  showColours();
+  previewDsTheme();
+  play("back");
+}
+
 function previewDsTheme() {
   clearTimeout(dsThemeTimer);
   dsThemeTimer = setTimeout(async () => {
@@ -1491,29 +1683,55 @@ function previewDsTheme() {
 }
 
 for (const [input, key] of [["dsThemePaper", "paper"], ["dsThemeInk", "ink"]]) {
-  $(input).addEventListener("input", () => { dsTheme[key] = $(input).value; previewDsTheme(); });
+  $(input).addEventListener("input", () => { rememberColours(); dsTheme[key] = $(input).value; previewDsTheme(); });
 }
-$("dsThemeBoost").addEventListener("input", () => {
-  dsTheme.boost = Number($("dsThemeBoost").value);
-  $("dsThemeBoostValue").textContent = `${dsTheme.boost}%`;
-  previewDsTheme();
-});
-$("dsThemeLift").addEventListener("input", () => {
-  dsTheme.lift = Number($("dsThemeLift").value);
-  $("dsThemeLiftValue").textContent = `${dsTheme.lift}%`;
-  previewDsTheme();
-});
+for (const [input, key] of [["dsThemeBoost", "boost"], ["dsThemeLift", "lift"]]) {
+  $(input).addEventListener("input", () => {
+    rememberColours();
+    dsTheme[key] = Number($(input).value);
+    $(`${input}Value`).textContent = `${dsTheme[key]}%`;
+    previewDsTheme();
+  });
+}
+$("dsThemeUndo").addEventListener("click", undoColours);
+
 // The sleep screen is saved as it changes, as part of the active theme.
 let sleepTimer = null;
 function changeSleep() {
   const sleep = { file: $("sleepFile").value, screen: $("sleepScreen").value, brightness: Number($("sleepBrightness").value) };
   $("sleepScreen").disabled = !sleep.file;
   $("sleepBrightnessValue").textContent = `${sleep.brightness}%`;
+  showDim();
   clearTimeout(sleepTimer);
   sleepTimer = setTimeout(() => changeDsTheme({ action: "sleep", sleep }).catch(error => toast(error.message, true)), SAVE_DELAY);
 }
 for (const id of ["sleepFile", "sleepScreen"]) $(id).addEventListener("change", () => { play("select"); changeSleep(); });
 $("sleepBrightness").addEventListener("input", changeSleep);
+
+// The preview dims as the DS does: by its brightness, or the sleep screen's while that's on show.
+function showDim() {
+  const level = Number(sleepPreview ? $("sleepBrightness").value : $("brightness").value);
+  document.documentElement.style.setProperty("--dim", ((1 - level / 100) * .7).toFixed(3));
+}
+
+// The sleep screen as the DS shows it: black, with the GIF where the app puts it.
+function sleepElements() {
+  const box = dsThemes?.sleepBox;
+  if (!box) return [];
+  const [crop_x, crop_y, crop_w, crop_h] = box.crop;
+  return [{ x: box.x, y: box.y, w: box.w, h: box.h, props: { file: dsThemes.sleep.file, crop_x, crop_y, crop_w, crop_h } }];
+}
+
+function setSleepPreview(on) {
+  if (on === sleepPreview) return;
+  sleepPreview = on;
+  $("sleepPreview").setAttribute("aria-pressed", String(on));
+  $("sleepPreview").textContent = on ? "Stop preview" : "Preview";
+  document.documentElement.classList.toggle("sleeping", on);
+  showDim();
+  renderAnimations();
+}
+$("sleepPreview").addEventListener("click", () => { play(sleepPreview ? "back" : "select"); setSleepPreview(!sleepPreview); });
 
 $("dsThemeSave").addEventListener("click", async () => {
   const name = $("dsThemeName").value.trim();
@@ -1535,6 +1753,28 @@ $("dsThemeDelete").addEventListener("click", async () => {
     toast(builtIn ? "Theme reset" : "Theme deleted");
   } catch (error) { toast(error.message, true); }
 });
+$("dsThemeExport").addEventListener("click", () => play("select"));
+$("dsThemeImport").addEventListener("change", async event => {
+  const [file] = event.target.files;
+  event.target.value = "";
+  if (!file) return;
+  try {
+    await changeDsTheme({ action: "import", zip: file });
+    showDsTheme(dsThemes.active);
+    toast(`Added ${dsThemes.active}`);
+  } catch (error) { toast(error.message, true); }
+});
+
+// Which settings are folded away is remembered.
+let closedGroups = [];
+try { closedGroups = JSON.parse(localStorage.getItem("closedGroups") || "[]"); } catch {}
+for (const group of document.querySelectorAll(".group")) {
+  group.open = !closedGroups.includes(group.dataset.group);
+  group.addEventListener("toggle", () => {
+    const closed = [...document.querySelectorAll(".group:not([open])")].map(node => node.dataset.group);
+    try { localStorage.setItem("closedGroups", JSON.stringify(closed)); } catch {}
+  });
+}
 
 // Live status
 
@@ -1553,41 +1793,47 @@ async function refreshFrame() {
       frameUrl = url;
     }
   } catch {
-    // The next poll tries again.
+    // The next status tries again.
   } finally {
     frameLoading = false;
     if (frameWanted) { frameWanted = false; refreshFrame(); }
   }
 }
 
-async function refresh() {
-  if (refreshing || document.hidden) return;
-  refreshing = true;
-  try {
-    const s = await api("/api/status", { signal: AbortSignal.timeout(REQUEST_TIMEOUT) });
-    $("dot").classList.toggle("on", s.connected);
-    $("link").textContent = s.connected ? `Connected on ${s.port}` : "Waiting for the DS…";
-    $("linkChip").title = [`DS app: ${s.firmware}`, s.connected ? "" : s.lastError].filter(Boolean).join("\n");
-    $("version").textContent = s.version ? `v${s.version}` : "";
-    $("cpu").textContent = `${s.cpu.toFixed(0)}%`;
-    $("ram").textContent = `${s.ram.toFixed(0)}%`;
-    $("cpuBar").style.width = `${s.cpu}%`;
-    $("ramBar").style.width = `${s.ram}%`;
-    $("sent").textContent = `${(s.bytesSent / 1024).toFixed(0)} KB`;
-    if (!brightnessReady) {
-      $("brightness").value = s.brightness;
-      $("brightnessValue").textContent = `${s.brightness}%`;
-      brightnessReady = true;
-    }
-    // Only when the picture changed: most seconds it hasn't.
-    if (shownFrame === null || String(s.frame) !== shownFrame) refreshFrame();
-    if (s.layoutRevision > revision && !saveTimer && !saveAgain && !writing) pullLayout();
-  } catch {
+function showStatus(s) {
+  $("dot").classList.toggle("on", s.connected);
+  $("link").textContent = s.connected ? `Connected on ${s.port}` : "Waiting for the DS…";
+  $("linkChip").title = [`DS app: ${s.firmware}`, s.connected ? "" : s.lastError].filter(Boolean).join("\n");
+  $("version").textContent = s.version ? `v${s.version}` : "";
+  $("cpu").textContent = `${s.cpu.toFixed(0)}%`;
+  $("ram").textContent = `${s.ram.toFixed(0)}%`;
+  $("cpuBar").style.width = `${s.cpu}%`;
+  $("ramBar").style.width = `${s.ram}%`;
+  $("sent").textContent = `${(s.bytesSent / 1024).toFixed(0)} KB`;
+  if (!brightnessReady) {
+    $("brightness").value = s.brightness;
+    $("brightnessValue").textContent = `${s.brightness}%`;
+    brightnessReady = true;
+    showDim();
+  }
+  // Only when the picture changed: most seconds it hasn't.
+  if (shownFrame === null || String(s.frame) !== shownFrame) refreshFrame();
+  if (s.layoutRevision > revision && !saveTimer && !saveAgain && !writing) pullLayout();
+}
+
+// The app sends the status each time it draws, so the page shows a change as it happens and
+// never has to ask. A hidden tab stops listening, and catches up when it's shown again.
+let events = null;
+
+function listen() {
+  if (document.hidden) { events?.close(); events = null; return; }
+  if (events) return;
+  events = new EventSource("/api/events");
+  events.onmessage = event => showStatus(JSON.parse(event.data));
+  events.onerror = () => {      // It reconnects by itself.
     $("dot").classList.remove("on");
     $("link").textContent = "App not running";
-  } finally {
-    refreshing = false;
-  }
+  };
 }
 
 async function start() {
@@ -1608,8 +1854,7 @@ async function start() {
   renderAll();
   dsThemes = await api("/api/themes");
   showDsTheme(dsThemes.active);
-  refresh();
-  setInterval(refresh, 1000);
-  document.addEventListener("visibilitychange", refresh);
+  listen();
+  document.addEventListener("visibilitychange", listen);
 }
 start();

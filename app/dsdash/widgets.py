@@ -12,9 +12,6 @@ from PIL import Image, ImageFont, ImageSequence
 from . import layout as layouts
 from .sensors import Stats
 
-# The menu button frame in grf/box.bmp: raised on top, flat below. The web editor uses it for its buttons.
-BUTTON_FRAMES = {"raised": (7, 4, 57, 54), "flat": (7, 68, 57, 118)}
-
 
 @lru_cache(maxsize=8)
 def font(size: int):
@@ -44,11 +41,6 @@ def _load_image(name: str) -> Image.Image:
         if path.suffix.lower() == ".gif":
             image = next(ImageSequence.Iterator(image)).copy()
         return _remove_key_color(image)
-
-
-def button_frame(style: str) -> Image.Image:
-    """The button art with its transparent margin removed, for CSS border images."""
-    return load_art("art:grf/box.bmp").crop(BUTTON_FRAMES[style])
 
 
 def menu_art() -> Image.Image:
@@ -128,4 +120,20 @@ def render(layout: dict, stats: Stats, now: datetime) -> Image.Image:
         except (OSError, ValueError, KeyError):
             pass
     return canvas
+
+
+def draw_animations(canvas: Image.Image, layout: dict):
+    """Each GIF's first frame, for a still picture. The DS plays them itself, over the live picture."""
+    for element in layout["elements"]:
+        if element["type"] != "animation" or element["hidden"]:
+            continue
+        try:
+            props = element["props"]
+            image = load_art(props["file"])
+            if props["crop_w"] and props["crop_h"]:
+                image = image.crop((props["crop_x"], props["crop_y"], props["crop_x"] + props["crop_w"], props["crop_y"] + props["crop_h"]))
+            image = image.resize((element["w"], element["h"]), Image.NEAREST)
+            canvas.paste(image, (element["x"], element["y"]), image)
+        except (OSError, ValueError, KeyError):
+            pass
 

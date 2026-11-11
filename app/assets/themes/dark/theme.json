@@ -11,7 +11,7 @@
     "brightness": 30
   },
   "layout": {
-    "version": 1,
+    "version": 2,
     "elements": [
       {
         "id": "top_paper",
@@ -209,7 +209,7 @@
         "type": "button",
         "x": 33,
         "y": 217,
-        "w": 190,
+        "w": 189,
         "h": 45,
         "hidden": false,
         "locked": false,
@@ -288,8 +288,8 @@
         "type": "graph",
         "x": 147,
         "y": 222,
-        "w": 72,
-        "h": 36,
+        "w": 70,
+        "h": 35,
         "hidden": false,
         "locked": false,
         "props": {
@@ -347,8 +347,8 @@
         "type": "graph",
         "x": 38,
         "y": 281,
-        "w": 84,
-        "h": 26,
+        "w": 83,
+        "h": 24,
         "hidden": false,
         "locked": false,
         "props": {
@@ -406,8 +406,8 @@
         "type": "graph",
         "x": 134,
         "y": 281,
-        "w": 84,
-        "h": 26,
+        "w": 83,
+        "h": 24,
         "hidden": false,
         "locked": false,
         "props": {
@@ -420,7 +420,7 @@
         "type": "button",
         "x": 33,
         "y": 313,
-        "w": 190,
+        "w": 189,
         "h": 45,
         "hidden": false,
         "locked": false,
@@ -449,7 +449,7 @@
         "type": "bar",
         "x": 41,
         "y": 336,
-        "w": 174,
+        "w": 173,
         "h": 10,
         "hidden": false,
         "locked": false,
@@ -461,7 +461,7 @@
       {
         "id": "disk_value",
         "type": "text",
-        "x": 180,
+        "x": 178,
         "y": 315,
         "w": 40,
         "h": 12,
