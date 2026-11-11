@@ -299,6 +299,11 @@ class ThemeStore:
         self._point_art()
         self._write_state()
 
+    def set_colours(self, theme: dict):
+        """Changes the active theme's colours, keeping the rest of it."""
+        write(self._writable(self.active_name), **clean(theme))
+        self.preview = None
+
     def save(self, name, theme: dict):
         """Saves the colours under a name. A new name copies the active theme: its art, uploads and layout."""
         name, theme = clean_name(name), clean(theme)

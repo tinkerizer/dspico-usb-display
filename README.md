@@ -8,8 +8,10 @@ in [docs/PLAN.md](docs/PLAN.md).
 
 ## What it does
 
-- **Live editor:** a Windows tray app shows the DS as it is right now. Click a screen to edit at
-  2× or more, drag widgets, and the DS updates as you go. Widgets snap to edges and each other
+- **Live preview and settings:** a Windows tray app shows the DS as it is right now, with themes,
+  colours, brightness and the sleep screen beside it.
+- **Editor:** click a screen, or **Edit layout**, to edit at 2× or more. Drag widgets, and the DS
+  updates as you go. Widgets snap to edges and each other
   (Alt places freely), and arrow keys nudge them. Layers and JSON open on the right.
 
   ![Editing a widget](docs/images/editing.png)

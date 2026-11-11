@@ -263,3 +263,20 @@ class LayerTests(BrowserCase):
         page = self.open_layers()
         page.click("#list .item[data-id=clock]")
         self.assertEqual(page.locator("#overlay .box.selected").get_attribute("data-id"), "clock")
+
+
+class InspectorTests(BrowserCase):
+    soft_reset = True
+    editing = True
+
+    def test_settings_bubble_keeps_clear_of_the_layers_drawer(self):
+        page = self.open(width=1400, height=1000)
+        page.click("#toggleLayers")
+        self.addCleanup(page.evaluate, "if (!$('drawer').hidden) showDrawer($('drawer').dataset.tab)")
+        self.select(page, "cpu_graph")
+        page.wait_for_selector("#inspector", state="visible")
+        page.evaluate("placeInspector()")
+        page.wait_for_function("""() => {
+          const bubble = $('inspector').getBoundingClientRect(), drawer = $('drawer').getBoundingClientRect();
+          return bubble.width > 0 && bubble.right <= drawer.left;
+        }""", timeout=3000)

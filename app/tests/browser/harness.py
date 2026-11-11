@@ -299,6 +299,7 @@ class BrowserCase(unittest.TestCase):
     def reload(self, page):
         page.reload()
         wait_ready(page)
+        self.set_editing(page)
 
     # The page's own state. Its top-level `let`s are visible to evaluate().
 

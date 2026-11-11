@@ -23,6 +23,7 @@ MAX_UPLOAD = 8 * 1024 * 1024
 HANG_UP_SECONDS = .25
 SOUNDS = {"select.wav", "back.wav", "launch.wav"}
 REVISION_HEADER = "X-Layout-Revision"
+DAY, WEEK = 86400, 7 * 86400
 STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml"}
 
 
@@ -39,11 +40,13 @@ def make_handler(app: App, port: int):
         def log_message(self, format, *args):
             log.debug(format, *args)
 
-        def _send(self, body: bytes, content_type: str, status: int = 200, revision=None):
+        def _send(self, body: bytes, content_type: str, status: int = 200, revision=None, cache_seconds=0, headers=()):
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", f"max-age={cache_seconds}" if cache_seconds else "no-store")
+            for name, value in headers:
+                self.send_header(name, value)
             if revision is not None:
                 self.send_header(REVISION_HEADER, str(revision))
             if self.close_connection:
@@ -75,7 +78,8 @@ def make_handler(app: App, port: int):
             elif path == "/api/status":
                 self._json(app.status())
             elif path == "/api/frame.png":
-                self._send(app.frame_png(), "image/png")
+                frame_id, png = app.frame_png()
+                self._send(png, "image/png", headers=[("X-Frame", str(frame_id))])
             elif path == "/api/layout":
                 # Revision first: a save in between then looks stale, which is the safe way round.
                 revision = app.revision
@@ -89,7 +93,7 @@ def make_handler(app: App, port: int):
             elif path.startswith("/web/"):
                 self._send_static(path[len("/web/"):])
             elif path == "/font.otf":
-                self._send(UI_FONT.read_bytes(), "font/otf")
+                self._send(UI_FONT.read_bytes(), "font/otf", cache_seconds=WEEK)     # 4 MB, and it never changes
             elif path in ("/ui/raised.png", "/ui/flat.png"):
                 out = BytesIO()
                 widgets.button_frame(path[len("/ui/"):-len(".png")]).save(out, "PNG")
@@ -115,7 +119,8 @@ def make_handler(app: App, port: int):
             if WEB_DIR.resolve() not in file.parents or not file.is_file():
                 self._json({"error": "Not found"}, 404)
                 return
-            self._send(file.read_bytes(), STATIC_TYPES.get(file.suffix, "application/octet-stream"))
+            self._send(file.read_bytes(), STATIC_TYPES.get(file.suffix, "application/octet-stream"),
+                       cache_seconds=DAY if name.startswith("vendor/") else 0)
 
         def _send_art(self, name: str):
             """Art as PNG with its magenta key colour removed, ready for CSS."""

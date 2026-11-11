@@ -747,6 +747,34 @@ class RevisionTests(unittest.TestCase):
         self.assertEqual(self.saved().read_bytes(), before)
         self.assertTrue(self.app.layout["elements"])
 
+    def fetch(self, path):
+        client = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        self.addCleanup(client.close)
+        client.request("GET", path)
+        response = client.getresponse()
+        return response, response.read()
+
+    def test_the_big_font_is_cached_and_live_data_is_not(self):
+        self.assertIn("max-age=", self.fetch("/font.otf")[0].getheader("Cache-Control"))
+        self.assertIn("max-age=", self.fetch("/web/vendor/motion.js")[0].getheader("Cache-Control"))
+        for path in ("/web/app.js", "/api/status", "/api/frame.png"):
+            self.assertEqual(self.fetch(path)[0].getheader("Cache-Control"), "no-store", path)
+
+    def test_the_picture_has_a_number_that_only_changes_with_it(self):
+        response, first = self.fetch("/api/frame.png")
+        number = response.getheader("X-Frame")
+        self.assertEqual(self.call("GET", "/api/status")[1]["frame"], int(number))
+        again, second = self.fetch("/api/frame.png")
+        self.assertEqual((again.getheader("X-Frame"), second), (number, first))
+
+    def test_colours_save_to_the_theme_without_touching_the_layout(self):
+        before = self.app.revision
+        theme = {"paper": "#102030", "ink": "#ffffff", "boost": 10, "lift": 0, "bar": 3}
+        status, listing, _ = self.call("POST", "/api/themes", json.dumps({"action": "colours", "theme": theme}))
+        self.assertEqual((status, listing["themes"][listing["active"]]), (200, theme))
+        self.assertEqual(self.app.revision, before)
+        self.assertEqual(themes.read(self.app.themes.folder), theme)
+
     def test_an_out_of_date_reset_is_refused(self):
         _, _, seen = self.call("GET", "/api/layout")
         self.post(seen)

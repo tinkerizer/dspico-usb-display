@@ -20,7 +20,7 @@ STATE = """(() => {
     label: style.getPropertyValue('--ds-label'),
     stored: localStorage.getItem('shellColour'),
     input: document.getElementById('shellColour').value,
-    pressed: [...document.querySelectorAll('.shell-swatch[aria-pressed=true]')].map(swatch => swatch.title),
+    pressed: [...document.querySelectorAll('#swatches .shell-swatch[aria-pressed=true]')].map(swatch => swatch.title),
   };
 })()"""
 
@@ -43,17 +43,21 @@ def rgb(colour):
     return tuple(int(colour[i:i + 2], 16) for i in (1, 3, 5))
 
 
+def open_shell(page):
+    """The shell settings are folded away in the settings panel."""
+    page.evaluate("document.getElementById('shellGroup').open = true")
+
+
 def pick(page, name):
-    if page.locator("#shellMenu").is_hidden():
-        page.click("#shellButton")
+    open_shell(page)
     page.click(f".shell-swatch[title={name}]")
 
 
 class ShellColourTests(BrowserCase):
     def test_swatches_set_the_colour_and_the_label(self):
         page = self.open()
-        page.click("#shellButton")
-        self.assertEqual(page.locator(".shell-swatch").count(), len(SWATCHES))
+        open_shell(page)
+        self.assertEqual(page.locator("#swatches .shell-swatch").count(), len(SWATCHES))
         for name, colour in SWATCHES.items():
             with self.subTest(name):
                 page.click(f".shell-swatch[title={name}]")
@@ -64,9 +68,8 @@ class ShellColourTests(BrowserCase):
 
     def test_the_shell_itself_changes_colour(self):
         page = self.open()
-        page.click("#shellButton")
+        open_shell(page)
         pick(page, "Red")
-        page.keyboard.press("Escape")
         page.evaluate(NEXT_PAINT)
         rect = page.evaluate("""(({ left, width }, { top, height }) => ({ x: left + width * .1, y: top + height / 2, width: 4, height: 4 }))
           (document.querySelector('.console').getBoundingClientRect(), document.querySelector('.lcd.top').getBoundingClientRect())""")
@@ -80,7 +83,7 @@ class ShellColourTests(BrowserCase):
 
     def test_custom_colour_and_swatch_survive_a_reload(self):
         page = self.open()
-        page.click("#shellButton")
+        open_shell(page)
         page.locator("#shellColour").fill("#123456")
         wanted = {"colour": "#123456", "stored": "#123456", "input": "#123456", "pressed": [], "label": DARK_LABEL}
         self.assertEqual(page.evaluate(STATE), wanted)
@@ -110,7 +113,7 @@ class ShellColourTests(BrowserCase):
         body = (grey[..., 0] == 128) & (grey[..., 3] == 255)
         self.assertGreater(int(body.sum()), 0)
 
-        page.click("#shellButton")
+        open_shell(page)
         seen = set()
         for name in ("Red", "Blue", "White"):
             with self.subTest(name):
@@ -209,7 +212,7 @@ class ShellButtonTests(BrowserCase):
 class SelectionTests(BrowserCase):
     def test_clicking_around_selects_nothing(self):
         page = self.open(width=1920, height=1060)
-        for selector in (".brand", ".press", ".tile", ".shell-art", ".meters"):
+        for selector in (".brand", ".press", ".theme-card", ".shell-art", ".meters"):
             with self.subTest(selector=selector):
                 box = page.locator(selector).first.bounding_box()
                 page.mouse.dblclick(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
@@ -223,6 +226,7 @@ class SelectionTests(BrowserCase):
 
     def test_json_can_still_be_selected(self):
         page = self.open(width=1920, height=1060)
+        page.evaluate("setEditing(true)")
         page.click("#toggleJson")
         page.wait_for_selector("#json")
         page.evaluate("document.getElementById('json').select()")
@@ -251,6 +255,7 @@ class PageLoadTests(BrowserCase):
         page.goto(harness.url.replace("127.0.0.1", "localhost"))
         wait_ready(page)
         self.check_loaded(page)
+        page.evaluate("setEditing(true)")
         page.click("#toggleLayers")
         page.wait_for_selector("#list .item", state="visible")
 
@@ -274,7 +279,6 @@ class ThemeLayoutTests(BrowserCase):
 
     def test_the_sleep_screen_is_set_from_the_theme_menu(self):
         page = self.open()
-        page.click("#dsThemeButton")
         page.wait_for_selector("#sleepFile option[value='art:sleep/sleepy_cat.gif']", state="attached")
         self.assertEqual(page.input_value("#sleepFile"), "art:sleep/sleepy_cat.gif")
         page.select_option("#sleepScreen", "bottom")

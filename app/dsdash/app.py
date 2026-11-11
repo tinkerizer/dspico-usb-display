@@ -7,6 +7,7 @@ from datetime import datetime
 from io import BytesIO
 from typing import List, Optional, Tuple
 
+import numpy as np
 from PIL import Image
 
 from . import codec, layout as layouts, themes, widgets
@@ -34,6 +35,9 @@ class App:
         self.revision = time.time_ns() // 1_000_000
         self.brightness = 100
         self._frame = Image.new("RGB", (256, 384))
+        self._frame_id = 0          # Goes up when the picture changes, so the editor only fetches new ones
+        self._frame_pixels = None
+        self._frame_png = (-1, b"")
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._render_now = threading.Event()
@@ -79,9 +83,11 @@ class App:
                 self.themes.delete(name)
             elif action == "sleep":
                 self.themes.set_sleep(request.get("sleep"))
+            elif action == "colours":
+                self.themes.set_colours(request.get("theme") or {})
             else:
                 raise ValueError("Unknown theme action")
-            if action not in ("preview", "sleep"):
+            if action not in ("preview", "sleep", "colours"):
                 # Each theme has its own layout, so the editor reloads it.
                 self.layout = self.themes.layout
                 self.revision += 1
@@ -139,12 +145,17 @@ class App:
         self.brightness = max(0, min(100, level))
         self.device.set_brightness(self.brightness)
 
-    def frame_png(self) -> bytes:
+    def frame_png(self) -> Tuple[int, bytes]:
+        """The picture's number and the picture. It's encoded once per change, not once per request."""
         with self._lock:
-            frame = self._frame
-        out = BytesIO()
-        frame.save(out, "PNG")
-        return out.getvalue()
+            frame_id, frame, cached = self._frame_id, self._frame, self._frame_png
+        if cached[0] != frame_id:
+            out = BytesIO()
+            frame.save(out, "PNG")
+            cached = (frame_id, out.getvalue())
+            with self._lock:
+                self._frame_png = cached
+        return cached
 
     def status(self) -> dict:
         device = self.device.status
@@ -159,6 +170,7 @@ class App:
             "firmware": self.firmware.state,
             "brightness": self.brightness,
             "layoutRevision": self.revision,
+            "frame": self._frame_id,
             "cpu": stats.cpu_percent,
             "ram": stats.ram_percent,
         }
@@ -178,9 +190,12 @@ class App:
                 theme = self.themes.active
                 themed = themes.apply_layout(current, theme)
                 frame = themes.apply_tone(widgets.render(themed, stats, datetime.now()), themed, theme)
+                pixels = codec.to_abgr1555(frame)
                 with self._lock:
-                    self._frame = frame
-                self.device.submit_frame(codec.to_abgr1555(frame))
+                    if self._frame_pixels is None or not np.array_equal(pixels, self._frame_pixels):
+                        self._frame, self._frame_pixels = frame, pixels
+                        self._frame_id += 1
+                self.device.submit_frame(pixels)
             except Exception:
                 log.exception("Render failed")
 

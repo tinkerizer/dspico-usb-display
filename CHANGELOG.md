@@ -10,6 +10,13 @@ version as the release notes.
   a suspended port as a closed one, and the app starts a fresh session after any long pause. Needs
   DS build 18, which the app installs by itself.
 - **Pulled cable:** the DS shows the sleep screen, as it can't tell that from a sleeping PC.
+- **Settings beside the DS:** themes, colours, brightness, the sleep screen and the page's shell
+  are always in a panel next to the preview, so changes show as you make them. Themes are cards
+  to click. Colour changes save to the theme as you go, like layout edits.
+- **Tools only in the editor:** the preview has an **Edit layout** button instead, and the top bar
+  is shorter. An element's settings no longer open over the layer list.
+- **Faster page:** the 4 MB font is cached instead of downloaded on every load, and the preview
+  picture is only fetched when it has changed.
 
 ## 1.2.0
 

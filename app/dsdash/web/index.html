@@ -20,9 +20,6 @@
     <div class="meter sent"><span>USB</span><span id="sent">–</span></div>
   </div>
   <div class="spacer"></div>
-  <button class="ds-button" id="dsThemeButton" aria-haspopup="dialog" aria-expanded="false">DS theme</button>
-  <button class="ds-button" id="shellButton" aria-haspopup="dialog" aria-expanded="false">Shell</button>
-  <button class="ds-button" id="brightnessButton" aria-haspopup="dialog" aria-expanded="false">Brightness</button>
   <button class="ds-button" id="fitButton" aria-pressed="false">Pixel perfect</button>
   <button class="ds-button" id="themeButton">Dark</button>
   <button class="ds-button" id="soundButton" aria-pressed="true">Sound on</button>
@@ -74,6 +71,7 @@
         <div id="overlay"></div>
       </div>
     </div>
+    <button class="ds-button edit" id="editButton" title="Or click a screen">Edit layout</button>
     <nav class="dock" aria-label="Tools">
       <button class="tile" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><span class="icon undo"></span><span class="tool-label">Undo</span></button>
       <button class="tile" id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><span class="icon redo"></span><span class="tool-label">Redo</span></button>
@@ -84,6 +82,62 @@
       <button class="tile" id="reset" title="Reset" aria-label="Reset"><span class="icon reset"></span><span class="tool-label">Reset</span></button>
     </nav>
   </div>
+
+  <aside class="panel" id="panel" aria-label="Settings">
+    <details class="group" open>
+      <summary>Theme</summary>
+      <div class="theme-list" id="dsThemeList" role="listbox" aria-label="Theme"></div>
+      <div class="row">
+        <input id="dsThemeName" type="text" maxlength="24" placeholder="New theme name" aria-label="New theme name">
+        <button class="ds-button" id="dsThemeSave" title="Copies this theme, with its layout and images, under a new name">Save copy</button>
+      </div>
+      <button class="ds-button" id="dsThemeDelete">Delete</button>
+    </details>
+
+    <details class="group" open>
+      <summary>Colours</summary>
+      <div class="pair">
+        <label class="field">Paper <input id="dsThemePaper" type="color"></label>
+        <label class="field">Ink <input id="dsThemeInk" type="color"></label>
+      </div>
+      <label class="field">Colour boost <output id="dsThemeBoostValue"></output>
+        <input id="dsThemeBoost" type="range" min="0" max="100" step="5">
+      </label>
+      <label class="field">Text lift <output id="dsThemeLiftValue"></output>
+        <input id="dsThemeLift" type="range" min="0" max="60" step="5">
+      </label>
+      <div class="field">Bar colour</div>
+      <div class="swatches bars" id="dsThemeBars"></div>
+    </details>
+
+    <details class="group" open>
+      <summary>Screen</summary>
+      <label class="field">Brightness <output id="brightnessValue"></output>
+        <input id="brightness" type="range" min="0" max="100" step="5">
+      </label>
+    </details>
+
+    <details class="group" open>
+      <summary>When the PC sleeps</summary>
+      <div class="pair">
+        <label class="field">Show <select id="sleepFile"></select></label>
+        <label class="field">Screen <select id="sleepScreen"><option value="top">Top</option><option value="bottom">Bottom</option></select></label>
+      </div>
+      <label class="field">Brightness <output id="sleepBrightnessValue"></output>
+        <input id="sleepBrightness" type="range" min="0" max="100" step="5">
+      </label>
+    </details>
+
+    <details class="group" id="shellGroup">
+      <summary>DS shell in this page</summary>
+      <div class="row" id="shellModels">
+        <button class="ds-button" data-model="lite">DS Lite</button>
+        <button class="ds-button" data-model="dsi">DSi</button>
+      </div>
+      <div class="swatches" id="swatches"></div>
+      <label class="field">Custom colour <input id="shellColour" type="color"></label>
+    </details>
+  </aside>
 </main>
 
 <div class="bubble" id="inspector" role="dialog" aria-labelledby="inspectorTitle" hidden>
@@ -98,49 +152,6 @@
 <div class="bubble" id="addMenu" role="dialog" aria-label="Add element" hidden>
   <span class="tail" id="addTail"></span>
   <div class="add-grid" id="addGrid"></div>
-</div>
-
-<div class="bubble" id="brightnessMenu" role="dialog" aria-label="Brightness" hidden>
-  <span class="tail" id="brightnessTail"></span>
-  <label class="field">Brightness <output id="brightnessValue"></output>
-    <input id="brightness" type="range" min="0" max="100" step="5">
-  </label>
-</div>
-
-<div class="bubble" id="dsThemeMenu" role="dialog" aria-label="DS theme" hidden>
-  <span class="tail" id="dsThemeTail"></span>
-  <label class="field">Theme <select id="dsThemeSelect"></select></label>
-  <label class="field">Paper <input id="dsThemePaper" type="color"></label>
-  <label class="field">Ink <input id="dsThemeInk" type="color"></label>
-  <label class="field">Colour boost <output id="dsThemeBoostValue"></output>
-    <input id="dsThemeBoost" type="range" min="0" max="100" step="5">
-  </label>
-  <label class="field">Text lift <output id="dsThemeLiftValue"></output>
-    <input id="dsThemeLift" type="range" min="0" max="60" step="5">
-  </label>
-  <div class="field">Bar colour</div>
-  <div class="swatches bars" id="dsThemeBars"></div>
-  <div class="field">When the PC sleeps</div>
-  <label class="field">Show <select id="sleepFile"></select></label>
-  <label class="field">Screen <select id="sleepScreen"><option value="top">Top</option><option value="bottom">Bottom</option></select></label>
-  <label class="field">Brightness <output id="sleepBrightnessValue"></output>
-    <input id="sleepBrightness" type="range" min="0" max="100" step="5">
-  </label>
-  <label class="field">Save as <input id="dsThemeName" type="text" maxlength="24" placeholder="Theme name"></label>
-  <div class="row">
-    <button class="ds-button" id="dsThemeSave">Save</button>
-    <button class="ds-button" id="dsThemeDelete">Delete</button>
-  </div>
-</div>
-
-<div class="bubble" id="shellMenu" role="dialog" aria-label="Shell colour" hidden>
-  <span class="tail" id="shellTail"></span>
-  <div class="row" id="shellModels">
-    <button class="ds-button" data-model="lite">DS Lite</button>
-    <button class="ds-button" data-model="dsi">DSi</button>
-  </div>
-  <div class="swatches" id="swatches"></div>
-  <label class="field">Custom colour <input id="shellColour" type="color"></label>
 </div>
 
 <div class="modal" id="modal" hidden>

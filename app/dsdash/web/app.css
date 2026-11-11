@@ -103,6 +103,9 @@ html:not(.editing) .screens:hover { outline: 2px solid var(--blue); outline-offs
 .done { position: absolute; left: calc(100% + 18px); top: -7px; }
 html:not(.editing) .done { display: none; }
 .editing .dock { margin-top: 14px; }
+/* The tools are for editing, so the preview has one button to start it instead. */
+html:not(.editing) .dock, .editing .edit { display: none; }
+.edit { margin-top: 12px; }
 .shell-art svg { display: block; width: 100%; height: 100%; }
 /* The shell's buttons. Shadows stay put, so the tops look pushed in. */
 .press { pointer-events: auto; cursor: var(--stylus); }
@@ -172,13 +175,43 @@ html:not(.editing) .done { display: none; }
 /* Layers and JSON: a drawer down the right, from the top bar to the bottom. The DS centres in what's left. */
 :root { --drawer: 380px; }
 :root:has(.drawer.wide) { --drawer: 460px; }
-main:has(.drawer:not([hidden])) { padding-right: calc(var(--drawer) + 16px); }
+.editing main:has(.drawer:not([hidden])) { padding-right: calc(var(--drawer) + 16px); }
+html:not(.editing) .drawer { display: none; }
 .drawer {
   position: fixed; right: 0; top: var(--bar, 46px); bottom: 0; z-index: 25; width: min(var(--drawer), 100vw);
   display: flex; flex-direction: column; padding: 10px 12px 12px;
   background: var(--surface); border-left: 2px solid var(--edge); box-shadow: -4px 0 0 rgba(0, 0, 0, .14);
 }
 .pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+/* Settings: what most people change day to day, beside the DS so its effect shows as it changes.
+   It's in the drawer's place, and the editor hides it. */
+:root { --panel: 300px; }
+html:not(.editing) main { padding-right: calc(var(--panel) + 16px); }
+.editing .panel { display: none; }
+.panel {
+  position: fixed; right: 0; top: var(--bar, 46px); bottom: 0; z-index: 25; width: var(--panel); overflow: hidden auto;
+  padding: 6px 12px 12px; background: var(--surface); border-left: 2px solid var(--edge); box-shadow: -4px 0 0 rgba(0, 0, 0, .14);
+}
+.group { margin-bottom: 6px; }
+.group > summary { display: flex; align-items: center; gap: 6px; padding: 5px 0; margin-bottom: 8px; color: var(--steel); border-bottom: 2px solid var(--line); cursor: var(--stylus); list-style: none; }
+.group > summary::-webkit-details-marker { display: none; }
+.group > summary::before { content: "+"; width: 10px; color: var(--soft); }
+.group[open] > summary::before { content: "-"; }
+.group > .ds-button { margin-top: 6px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.panel .row input { flex: 1; min-width: 0; }
+
+/* One card per theme: a small DS in its colours, and its name. */
+.theme-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.theme-card { display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 8px; text-align: left; color: var(--ink); background: var(--surface); border: 2px solid var(--line); cursor: var(--stylus); }
+.theme-card:hover { background: var(--hover); }
+.theme-card[aria-selected="true"] { border-color: var(--blue); background: var(--line-active); }
+.theme-card .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-card .tag { color: var(--soft); }
+.theme-chip { position: relative; flex: none; width: 24px; height: 32px; background: var(--chip-paper); border: 2px solid var(--edge); box-shadow: inset 0 4px 0 var(--chip-bar); }
+.theme-chip::before { content: ""; position: absolute; left: -2px; right: -2px; top: 13px; height: 2px; background: var(--edge); }
+.theme-chip::after { content: ""; position: absolute; left: 3px; right: 3px; top: 7px; height: 2px; background: var(--chip-ink); box-shadow: 0 11px 0 var(--chip-ink), 0 16px 0 var(--chip-ink); }
 .tabs { position: relative; display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 2px solid var(--line); }
 .tabs button { flex: 1; padding: 4px 0; border: 0; background: none; cursor: var(--stylus); color: var(--soft); }
 .tabs button[aria-selected="true"] { color: var(--steel); }
@@ -238,11 +271,11 @@ label, .field, .switch, select, input[type=color], input[type=range], input[type
 .swatches.bars { grid-template-columns: repeat(8, 28px); }
 .swatches.bars .shell-swatch { width: 28px; height: 22px; background-size: cover; image-rendering: pixelated; font: inherit; color: var(--ink); }
 .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.field input[type=number], .field input[type=text], .field select {
+.field input[type=number], .field input[type=text], .field select, .panel input[type=text] {
   display: block; width: 100%; height: 26px; padding: 0 5px; margin-top: 1px; color: var(--ink); background: var(--surface); border: 2px solid var(--edge); border-radius: 0; transition: box-shadow .1s;
 }
 .field select { appearance: none; padding-right: 20px; background: var(--surface) url("/web/arrow.svg") right 5px center no-repeat; }
-.field input:focus, .field select:focus { outline: none; border-color: var(--blue); box-shadow: 2px 2px 0 var(--focus); }
+.field input:focus, .field select:focus, .panel input[type=text]:focus { outline: none; border-color: var(--blue); box-shadow: 2px 2px 0 var(--focus); }
 .field input[type=color] { display: block; width: 100%; height: 26px; padding: 0; border: 2px solid var(--edge); background: var(--surface); cursor: var(--stylus); }
 input[type=range] { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 12px; margin-top: 8px; background: var(--line); border: 2px solid var(--edge); }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 22px; background: var(--blue); border: 2px solid #fff; box-shadow: 0 0 0 2px var(--edge); cursor: var(--stylus); }
@@ -288,6 +321,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .toast { padding: 6px 14px; }
 .toast.error { border-color: var(--red); }
 
+/* A narrow window has no room beside the DS, so the settings go below it. */
+@media (max-width: 900px) {
+  html:not(.editing) main { flex-direction: column; align-items: center; padding-right: 16px; }
+  .panel { position: static; width: min(100%, 420px); margin-top: 16px; border: 2px solid var(--edge); box-shadow: 4px 4px 0 rgba(0, 0, 0, .14); }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

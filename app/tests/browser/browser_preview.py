@@ -12,7 +12,7 @@ from harness import (HINGE, NEXT_PAINT, SEAM, W, BrowserCase, black_frame, chang
 
 SIZES = [(1920, 1060), (1920, 1080), (1366, 768), (1280, 720), (1600, 900), (2560, 1440), (1000, 800)]
 RECTS = """() => Object.fromEntries(Object.entries({
-  top: '.lcd.top', bottom: '.lcd.bottom', screens: '#screens', dock: '.dock', console: '.console', bar: '.topbar',
+  top: '.lcd.top', bottom: '.lcd.bottom', screens: '#screens', dock: '.dock', console: '.console', bar: '.topbar', edit: '#editButton', panel: '#panel',
 }).map(([name, selector]) => {
   const { left, top, right, bottom, width, height } = document.querySelector(selector).getBoundingClientRect();
   return [name, { left, top, right, bottom, width, height }];
@@ -134,28 +134,51 @@ class PixelTests(BrowserCase):
 
 
 class ShelfTests(BrowserCase):
-    def test_tools_can_be_reached_and_the_page_never_scrolls_sideways(self):
+    def test_what_is_under_the_ds_can_be_reached_and_the_page_never_scrolls_sideways(self):
         page = self.open()
-        for width, height in SIZES:
-            with self.subTest(width=width, height=height):
-                resize(page, width, height)
-                self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width)
-                page.evaluate("window.scrollTo(0, 100000)")
-                page.evaluate(NEXT_PAINT)
-                dock = page.evaluate(RECTS)["dock"]
-                self.assertGreaterEqual(dock["top"], 0)
-                self.assertLessEqual(dock["bottom"], height + 0.5)
+        for editing, name in ((False, "edit"), (True, "dock")):
+            page.evaluate("on => setEditing(on)", editing)
+            for width, height in SIZES:
+                with self.subTest(width=width, height=height, editing=editing):
+                    resize(page, width, height)
+                    self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width)
+                    page.evaluate("document.querySelector(editing ? '.dock' : '#editButton').scrollIntoView({ block: 'end' })")
+                    page.evaluate(NEXT_PAINT)
+                    under = page.evaluate(RECTS)[name]
+                    self.assertGreater(under["height"], 0)
+                    self.assertGreaterEqual(under["top"], 0)
+                    self.assertLessEqual(under["bottom"], height + 0.5)
 
-    def test_tools_sit_just_below_the_shell(self):
+    def test_tools_show_only_in_the_editor_just_below_the_screens(self):
+        page = self.open(width=1920, height=1060)
+        self.assertFalse(page.locator(".dock").is_visible())
+        self.assertTrue(page.locator("#editButton").is_visible())
+        page.click("#editButton")
+        r = page.evaluate(RECTS)
+        self.assertFalse(page.locator("#editButton").is_visible())
+        self.assertFalse(page.locator("#panel").is_visible())
+        gap = r["dock"]["top"] - r["console"]["bottom"]
+        self.assertGreater(gap, 0, "The tools touch the screens")
+        self.assertLess(gap, 20, "The tools are too far from the screens")
+
+    def test_settings_sit_beside_the_ds_and_change_the_theme(self):
         page = self.open(width=1920, height=1060)
         r = page.evaluate(RECTS)
-        gap = r["dock"]["top"] - r["console"]["bottom"]
-        self.assertGreater(gap, 0, "The tools touch the shell")
-        self.assertLess(gap, 12, "The tools are too far from the shell")
+        self.assertEqual((r["panel"]["right"], r["panel"]["top"], r["panel"]["bottom"]), (1920, r["bar"]["bottom"], 1060))
+        self.assertLess(r["console"]["right"], r["panel"]["left"])
+        cards = page.locator(".theme-card")
+        self.assertGreaterEqual(cards.count(), 2)
+        self.assertEqual(page.locator(".theme-card[aria-selected=true]").get_attribute("data-theme"), "Classic")
+        # Put back by hand: resetting Classic would also drop the layout and images other tests use.
+        self.addCleanup(page.evaluate, "async () => { const t = (await api('/api/themes')).themes.Classic; await changeDsTheme({ action: 'colours', theme: { ...t, boost: 0 } }); }")
+        page.locator("#dsThemeBoost").fill("40")
+        page.wait_for_function("async () => (await api('/api/themes')).themes.Classic.boost === 40")
+        self.assertEqual(page.text_content("#dsThemeDelete"), "Reset Classic")
+        self.assertTrue(page.is_enabled("#dsThemeDelete"))
 
     def test_grid_runs_through_the_tile_cells(self):
         page = self.open(width=1920, height=1060)
-        for editing, fill, scroll in ((False, False, 0), (False, False, 100000), (True, False, 0), (True, True, 0), (False, True, 0)):
+        for editing, fill, scroll in ((True, False, 0), (True, False, 100000), (True, True, 0)):
             page.evaluate("([editing, fill]) => { setEditing(editing); setFill(fill); }", [editing, fill])
             page.evaluate("y => window.scrollTo(0, y)", scroll)
             page.evaluate(NEXT_PAINT)
@@ -172,12 +195,14 @@ class ShelfTests(BrowserCase):
         page = self.open(width=1920, height=1060)
         r = page.evaluate(RECTS)
         self.assertGreaterEqual(r["console"]["top"], r["bar"]["bottom"])
-        self.assertLessEqual(r["dock"]["bottom"], 1060)
-        self.assertAlmostEqual(r["console"]["left"], 1920 - r["console"]["right"], delta=1)
-        self.assertAlmostEqual(r["console"]["top"] - r["bar"]["bottom"], 1060 - r["dock"]["bottom"], delta=8)
+        self.assertLessEqual(r["edit"]["bottom"], 1060)
+        # Centred in the room beside the settings, and between the top bar and the bottom.
+        self.assertAlmostEqual(r["console"]["left"] - 16, r["panel"]["left"] - 16 - r["console"]["right"], delta=1)
+        self.assertAlmostEqual(r["console"]["top"] - r["bar"]["bottom"], 1060 - r["edit"]["bottom"], delta=8)
 
     def test_layers_open_in_a_full_height_drawer_on_the_right(self):
         page = self.open(width=1920, height=1060)
+        page.evaluate("setEditing(true)")
         page.click("#toggleLayers")
         page.evaluate(NEXT_PAINT)
         r = page.evaluate(RECTS)
@@ -215,7 +240,8 @@ class ShelfTests(BrowserCase):
                 page.evaluate("on => setEditing(on)", editing)
                 page.click("#fitButton")
                 r = page.evaluate(RECTS)
-                room = 1060 - r["bar"]["height"] - r["dock"]["height"] - (14 if editing else 6) - 32
+                under = r["dock"]["height"] + 14 if editing else r["edit"]["height"] + 12
+                room = 1060 - r["bar"]["height"] - under - 32
                 filled = r["screens"]["height"] * 408 / 392 if editing else r["console"]["height"]
                 self.assertAlmostEqual(filled, room, delta=1)
                 page.click("#fitButton")

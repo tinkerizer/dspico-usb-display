@@ -21,6 +21,7 @@ let revision = 0, unsaved = false, writing = 0, lastWrite = Promise.resolve(), p
 const collapsedLayers = new Set();
 try { JSON.parse(localStorage.getItem("collapsedLayers") || "[]").forEach(id => collapsedLayers.add(id)); } catch {}
 let frameUrl = null, frameLoading = false, frameWanted = false, refreshing = false;
+let shownFrame = null;      // The X-Frame number of the picture on show
 let keepBoxShape = false, jsonDirty = false, soundOn = true, openMenu = null;
 
 const selected = () => layout.elements.find(e => e.id === selectedId);
@@ -91,9 +92,12 @@ const api = async (path, options) => (await send(path, options)).body;
 // Popouts
 
 async function placeBubble(bubble, tail, reference, placement) {
+  // Bubbles keep clear of the drawer, so an element's settings don't cover the layer list.
+  const drawer = $("drawer").getBoundingClientRect().width;
+  const padding = { top: 10, left: 10, bottom: 10, right: 10 + drawer };
   const { x, y, placement: final, middlewareData } = await computePosition(reference, bubble, {
     strategy: "fixed", placement,
-    middleware: [offset(14), flip(), shift({ padding: 10 }), arrow({ element: tail })],
+    middleware: [offset(14), flip({ padding }), shift({ padding }), arrow({ element: tail })],
   });
   Object.assign(bubble.style, { left: `${x}px`, top: `${y}px` });
 
@@ -1076,7 +1080,7 @@ $("toggleJson").addEventListener("click", () => showDrawer("json"));
 $("layersTab").addEventListener("click", () => { if ($("drawer").dataset.tab !== "layers") showDrawer("layers"); });
 $("jsonTab").addEventListener("click", () => { if ($("drawer").dataset.tab !== "json") showDrawer("json"); });
 $("addButton").addEventListener("click", () => { play("select"); toggleMenu($("addMenu"), $("addButton"), $("addTail"), "top"); });
-$("brightnessButton").addEventListener("click", () => { play("select"); toggleMenu($("brightnessMenu"), $("brightnessButton"), $("brightnessTail"), "bottom"); });
+$("editButton").addEventListener("click", () => { play("launch"); setEditing(true); });
 $("soundButton").addEventListener("click", () => { setSound(!soundOn); play("select"); });
 $("themeButton").addEventListener("click", () => {
   play("select");
@@ -1116,10 +1120,15 @@ $("upload").addEventListener("change", async event => {
   event.target.value = "";
 });
 
-$("brightness").addEventListener("input", () => { $("brightnessValue").textContent = `${$("brightness").value}%`; });
-$("brightness").addEventListener("change", () => api("/api/brightness", {
-  method: "POST", body: JSON.stringify({ level: Number($("brightness").value) }),
-}));
+// The DS follows the slider as it moves.
+let brightnessTimer = null;
+$("brightness").addEventListener("input", () => {
+  $("brightnessValue").textContent = `${$("brightness").value}%`;
+  clearTimeout(brightnessTimer);
+  brightnessTimer = setTimeout(() => api("/api/brightness", {
+    method: "POST", body: JSON.stringify({ level: Number($("brightness").value) }),
+  }).catch(error => toast(error.message, true)), 80);
+});
 
 $("json").addEventListener("input", () => { jsonDirty = true; highlightJson(); });
 $("json").addEventListener("scroll", syncScroll);
@@ -1162,8 +1171,9 @@ function fitPreview() {
   const width = main.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   const bar = document.querySelector(".topbar").offsetHeight;
   document.documentElement.style.setProperty("--bar", `${bar}px`);
-  const dock = document.querySelector(".dock");
-  const tools = dock.offsetHeight + parseFloat(getComputedStyle(dock).marginTop);
+  // Under the DS: the tools in the editor, or the button that opens it.
+  const under = editing ? document.querySelector(".dock") : $("editButton");
+  const tools = under.offsetHeight + parseFloat(getComputedStyle(under).marginTop);
   const room = window.innerHeight - bar - tools - MARGIN * 2;
   const ratio = window.devicePixelRatio || 1;
   // The preview is sized for the largest shell, so switching shells never changes the scale.
@@ -1188,8 +1198,10 @@ function fitPreview() {
 
   // The page's grid is anchored to the tools, which sit 2px in from their grid lines.
   const firstTool = document.querySelector(".tile").getBoundingClientRect();
-  document.documentElement.style.setProperty("--grid-x", `${firstTool.left + window.scrollX - 2}px`);
-  document.documentElement.style.setProperty("--grid-y", `${firstTool.top + window.scrollY - 2}px`);
+  if (firstTool.width) {
+    document.documentElement.style.setProperty("--grid-x", `${firstTool.left + window.scrollX - 2}px`);
+    document.documentElement.style.setProperty("--grid-y", `${firstTool.top + window.scrollY - 2}px`);
+  }
   placeInspector();
 }
 
@@ -1360,7 +1372,6 @@ $("swatches").append(...Object.entries(SHELL_COLOURS).map(([name, colour]) => {
   return swatch;
 }));
 $("shellColour").addEventListener("input", () => setShellColour($("shellColour").value));
-$("shellButton").addEventListener("click", () => { play("select"); toggleMenu($("shellMenu"), $("shellButton"), $("shellTail"), "bottom"); });
 
 let savedShell = null;
 try { savedShell = localStorage.getItem("shellColour"); } catch {}
@@ -1372,8 +1383,9 @@ setTheme(document.documentElement.dataset.theme || "light");
 let dsThemes = null, dsTheme = null, dsThemeTimer = null;
 
 async function changeDsTheme(request) {
-  if (request.action === "preview" || request.action === "sleep") {
+  if (request.action === "colours" || request.action === "sleep") {
     dsThemes = await api("/api/themes", { method: "POST", body: JSON.stringify(request) });
+    renderThemeList();
     refreshFrame();
     return;
   }
@@ -1398,19 +1410,50 @@ async function changeDsTheme(request) {
   }
 }
 
+// One card per theme, each a small DS in that theme's colours.
+function renderThemeList() {
+  $("dsThemeList").replaceChildren(...Object.entries(dsThemes.themes).map(([name, theme]) => {
+    const card = document.createElement("button");
+    card.className = "theme-card";
+    card.setAttribute("role", "option");
+    card.setAttribute("aria-selected", String(name === dsThemes.active));
+    card.dataset.theme = name;
+    const chip = document.createElement("span");
+    chip.className = "theme-chip";
+    chip.style.setProperty("--chip-paper", theme.paper);
+    chip.style.setProperty("--chip-ink", theme.ink);
+    chip.style.setProperty("--chip-bar", dsThemes.colours[theme.bar]);
+    const label = document.createElement("span");
+    label.className = "name";
+    label.textContent = name;
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = !dsThemes.builtIn.includes(name) ? "yours" : dsThemes.edited.includes(name) ? "changed" : "";
+    card.append(chip, label, tag);
+    card.addEventListener("click", async () => {
+      if (name === dsThemes.active) return;
+      play("select");
+      try {
+        await changeDsTheme({ action: "use", name });
+        showDsTheme(dsThemes.active);
+      } catch (error) { toast(error.message, true); }
+    });
+    return card;
+  }));
+}
+
 function showDsTheme(name) {
   dsTheme = { ...dsThemes.themes[name] };
-  $("dsThemeSelect").replaceChildren(...Object.keys(dsThemes.themes).map(key => new Option(key, key, false, key === name)));
+  renderThemeList();
   $("dsThemePaper").value = dsTheme.paper;
   $("dsThemeInk").value = dsTheme.ink;
   $("dsThemeBoost").value = dsTheme.boost;
   $("dsThemeBoostValue").textContent = `${dsTheme.boost}%`;
   $("dsThemeLift").value = dsTheme.lift;
   $("dsThemeLiftValue").textContent = `${dsTheme.lift}%`;
-  $("dsThemeName").value = dsThemes.builtIn.includes(name) ? "" : name;
   const builtIn = dsThemes.builtIn.includes(name);
   $("dsThemeDelete").disabled = builtIn && !dsThemes.edited.includes(name);
-  $("dsThemeDelete").textContent = builtIn ? "Reset" : "Delete";
+  $("dsThemeDelete").textContent = builtIn ? `Reset ${name}` : `Delete ${name}`;
   const sleep = dsThemes.sleep;
   $("sleepFile").replaceChildren(new Option("Black screen", ""),
     ...dsThemes.gifs.map(file => new Option(file.split("/").pop().replace(/\.gif$/i, "").replaceAll("_", " "), file)));
@@ -1435,9 +1478,16 @@ function showDsTheme(name) {
   }));
 }
 
+// Colours are saved to the active theme as they change, like the layout is.
 function previewDsTheme() {
   clearTimeout(dsThemeTimer);
-  dsThemeTimer = setTimeout(() => changeDsTheme({ action: "preview", theme: dsTheme }).catch(error => toast(error.message, true)), SAVE_DELAY);
+  dsThemeTimer = setTimeout(async () => {
+    try {
+      await changeDsTheme({ action: "colours", theme: dsTheme });
+      const builtIn = dsThemes.builtIn.includes(dsThemes.active);
+      $("dsThemeDelete").disabled = builtIn && !dsThemes.edited.includes(dsThemes.active);
+    } catch (error) { toast(error.message, true); }
+  }, SAVE_DELAY);
 }
 
 for (const [input, key] of [["dsThemePaper", "paper"], ["dsThemeInk", "ink"]]) {
@@ -1465,30 +1515,25 @@ function changeSleep() {
 for (const id of ["sleepFile", "sleepScreen"]) $(id).addEventListener("change", () => { play("select"); changeSleep(); });
 $("sleepBrightness").addEventListener("input", changeSleep);
 
-$("dsThemeSelect").addEventListener("change", async () => {
-  play("select");
-  await changeDsTheme({ action: "use", name: $("dsThemeSelect").value });
-  showDsTheme(dsThemes.active);
-});
 $("dsThemeSave").addEventListener("click", async () => {
+  const name = $("dsThemeName").value.trim();
+  if (!name) { toast("Give the copy a name first", true); $("dsThemeName").focus(); return; }
   try {
-    await changeDsTheme({ action: "save", name: $("dsThemeName").value, theme: dsTheme });
+    await changeDsTheme({ action: "save", name, theme: dsTheme });
+    $("dsThemeName").value = "";
     showDsTheme(dsThemes.active);
-    toast("Theme saved");
+    toast(`Saved as ${name}`);
   } catch (error) { toast(error.message, true); }
 });
+$("dsThemeName").addEventListener("keydown", event => { if (event.key === "Enter") $("dsThemeSave").click(); });
 $("dsThemeDelete").addEventListener("click", async () => {
-  const name = $("dsThemeSelect").value, builtIn = dsThemes.builtIn.includes(name);
+  const name = dsThemes.active, builtIn = dsThemes.builtIn.includes(name);
   if (!await confirmDialog(builtIn ? `Put ${name} back as it came, losing your changes to it?` : `Delete ${name}, with its layout and images?`)) return;
-  await changeDsTheme({ action: "delete", name });
-  showDsTheme(dsThemes.active);
-  toast(builtIn ? "Theme reset" : "Theme deleted");
-});
-$("dsThemeButton").addEventListener("click", async () => {
-  play("select");
-  dsThemes = await api("/api/themes");
-  showDsTheme(dsThemes.active);
-  toggleMenu($("dsThemeMenu"), $("dsThemeButton"), $("dsThemeTail"), "bottom");
+  try {
+    await changeDsTheme({ action: "delete", name });
+    showDsTheme(dsThemes.active);
+    toast(builtIn ? "Theme reset" : "Theme deleted");
+  } catch (error) { toast(error.message, true); }
 });
 
 // Live status
@@ -1501,6 +1546,7 @@ async function refreshFrame() {
   try {
     const response = await fetch("/api/frame.png", { cache: "no-store", signal: AbortSignal.timeout(REQUEST_TIMEOUT) });
     if (response.ok) {
+      shownFrame = response.headers.get("X-Frame");
       const url = URL.createObjectURL(await response.blob());
       document.querySelectorAll(".lcd-frame").forEach(frame => { frame.src = url; });
       if (frameUrl) URL.revokeObjectURL(frameUrl);
@@ -1521,6 +1567,7 @@ async function refresh() {
     const s = await api("/api/status", { signal: AbortSignal.timeout(REQUEST_TIMEOUT) });
     $("dot").classList.toggle("on", s.connected);
     $("link").textContent = s.connected ? `Connected on ${s.port}` : "Waiting for the DS…";
+    $("linkChip").title = [`DS app: ${s.firmware}`, s.connected ? "" : s.lastError].filter(Boolean).join("\n");
     $("version").textContent = s.version ? `v${s.version}` : "";
     $("cpu").textContent = `${s.cpu.toFixed(0)}%`;
     $("ram").textContent = `${s.ram.toFixed(0)}%`;
@@ -1532,7 +1579,8 @@ async function refresh() {
       $("brightnessValue").textContent = `${s.brightness}%`;
       brightnessReady = true;
     }
-    refreshFrame();
+    // Only when the picture changed: most seconds it hasn't.
+    if (shownFrame === null || String(s.frame) !== shownFrame) refreshFrame();
     if (s.layoutRevision > revision && !saveTimer && !saveAgain && !writing) pullLayout();
   } catch {
     $("dot").classList.remove("on");
@@ -1558,6 +1606,8 @@ async function start() {
     if (drawer) { Effects.setSound(false); showDrawer(drawer); Effects.setSound(soundOn); }
   } catch {}
   renderAll();
+  dsThemes = await api("/api/themes");
+  showDsTheme(dsThemes.active);
   refresh();
   setInterval(refresh, 1000);
   document.addEventListener("visibilitychange", refresh);
