@@ -19,7 +19,12 @@ MAGIC = 0xD5
 PACKET_HELLO, PACKET_CLEAR, PACKET_BRIGHTNESS, PACKET_POWER = 1, 2, 3, 4
 PACKET_RECT_RAW, PACKET_RECT_RLE = 5, 6
 PACKET_KEEPALIVE = 9
-KEEPALIVE_SECONDS = 1     # The DS goes dark after 5 s with no packets, so it notices a sleeping PC
+KEEPALIVE_SECONDS = 1     # The DS shows its sleep screen after 5 s with no packets, so it notices a sleeping PC
+PAUSE_SECONDS = 5         # A gap this long means the PC slept or the app froze, so the session starts again
+
+
+class Paused(IOError):
+    pass
 PACKET_ANIM_BEGIN, PACKET_ANIM_FRAME, PACKET_ANIM_PLAY, PACKET_ANIM_RESET = 0x20, 0x21, 0x22, 0x24
 PACKET_ANIM_SLEEP = 0x25
 SLEEP_SLOT = 8      # The DS has 9 slots: 8 for the layout's GIFs, and this one for the sleep screen
@@ -131,6 +136,15 @@ class DsDevice(threading.Thread):
         import serial
         return serial.Serial(device, 115200, timeout=1, write_timeout=5, rtscts=False, dsrdtr=False)
 
+    @staticmethod
+    def _drop_output(port):
+        """Closing a port can block on Windows while a write is stuck in the driver, as when the DS stalls."""
+        for name in ("cancel_write", "reset_output_buffer"):
+            try:
+                getattr(port, name)()
+            except Exception:   # Not every port has these, and a dead one refuses them
+                pass
+
     def run(self):
         while not self._stopping:
             device = find_display_port(self._list_ports())
@@ -140,7 +154,10 @@ class DsDevice(threading.Thread):
                 continue
             try:
                 with self._open_port(device) as port:
-                    self._session(port, device)
+                    try:
+                        self._session(port, device)
+                    finally:
+                        self._drop_output(port)
             except Exception as error:   # Serial errors vary by OS and driver
                 self.status.last_error = str(error)
                 log.warning("DS link lost: %s", error)
@@ -165,7 +182,14 @@ class DsDevice(threading.Thread):
             self._animations_dirty = True
 
         last_sent = time.monotonic()
+        last_loop = (time.monotonic(), time.time())
         while True:
+            # After a sleep the port can look fine while the DS has reset or missed data.
+            # A new session makes the DS start clean and sends everything again.
+            now = (time.monotonic(), time.time())
+            if max(now[0] - last_loop[0], now[1] - last_loop[1]) > PAUSE_SECONDS:
+                raise Paused("the PC slept or the app paused, so starting a new session")
+            last_loop = now
             with self._condition:
                 while not (self._stopping or self._frame is not None or self._brightness_dirty
                            or self._animations_dirty):

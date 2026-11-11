@@ -3,6 +3,14 @@
 Each release's version is in [VERSION](VERSION). `tools/release --publish` uses the section for that
 version as the release notes.
 
+## Unreleased
+
+- **Sleep on more PCs:** the sleep screen now shows when the PC suspends its USB ports, which used
+  to leave the DS black, and the dashboard always comes back after waking. The DS no longer treats
+  a suspended port as a closed one, and the app starts a fresh session after any long pause. Needs
+  DS build 18, which the app installs by itself.
+- **Pulled cable:** the DS shows the sleep screen, as it can't tell that from a sleeping PC.
+
 ## 1.2.0
 
 - **Sleep screen:** when the PC sleeps, the DS shows a sleeping cat at low brightness on black,

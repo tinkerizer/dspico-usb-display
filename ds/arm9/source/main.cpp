@@ -350,7 +350,17 @@ static Animation sAnimations[DISPLAY_ANIM_SLOTS];
 static u32 sAnimStoreUsed = 0;
 static vu32 sVBlankCount = 0;
 static u32 sLastPacketVBlank = 0;
-static bool sHostAsleep = false;
+
+// What the host is doing, which decides what's on screen.
+enum class HostMode
+{
+    Boot,       // No packet yet: startup diagnostics
+    Live,       // Packets are arriving: the host's picture
+    Asleep,     // Port open but silent, as with a sleeping PC or a pulled cable: the sleep screen
+    Closed,     // The host closed the port: black
+};
+static HostMode sHostMode = HostMode::Boot;
+static bool sHaveSession = false;
 static u32 sSleepSlot = DISPLAY_ANIM_SLOTS;     // None
 static u8 sSleepBrightness = 0;
 static u8* const sAnimStore = (u8*)DISPLAY_ANIM_BASE;
@@ -431,7 +441,9 @@ static void updateAnimations()
     for (u32 slot = 0; slot < DISPLAY_ANIM_SLOTS; slot++)
     {
         Animation& animation = sAnimations[slot];
-        if (!animation.playing || (s32)(now - animation.dueVBlank) < 0 || sHostAsleep != (slot == sSleepSlot))
+        // The sleep animation plays only while asleep, and the host's only while live.
+        const HostMode plays = slot == sSleepSlot ? HostMode::Asleep : HostMode::Live;
+        if (!animation.playing || (s32)(now - animation.dueVBlank) < 0 || sHostMode != plays)
             continue;
 
         const u32 offset = animation.nextFrame;
@@ -460,13 +472,13 @@ static void forgetCover()
     memset(sCoverRows, 0, sizeof(sCoverRows));
 }
 
-// Black screens and the sleep animation, keeping the live picture in sBase for later.
-static void showSleepScreen()
+// Black screens, with the sleep animation if wanted. The live picture stays in sBase for later.
+static void showDarkScreen(bool withSleepAnimation)
 {
     dmaFillWords(0x80008000, (void*)VRAM_A_BASE, 256 * 192 * 2);
     dmaFillWords(0x80008000, (void*)VRAM_C_SUB_BG_BASE, 256 * 192 * 2);
     forgetCover();
-    if (isLoaded(sSleepSlot))
+    if (withSleepAnimation && isLoaded(sSleepSlot))
     {
         playAnimation(sSleepSlot);
         applyBrightness(sSleepBrightness);
@@ -499,6 +511,10 @@ static void handleSmallPacket()
     switch (sPacketType)
     {
         case DISPLAY_PACKET_HELLO:
+            // A new session. The host takes the DS to be black with no animations from here,
+            // and nothing else resets them, so the two can't disagree.
+            resetAnimations();
+            clearScreens();
             SHARED_DISPLAY->helloRequests = SHARED_DISPLAY->helloRequests + 1;
             DC_FlushRange((void*)&SHARED_DISPLAY->helloRequests, sizeof(u32));
             break;
@@ -550,6 +566,18 @@ static void handleSmallPacket()
     }
 }
 
+// Leftovers of a broken session can hold the magic byte by chance, so the rest of the header
+// has to make sense too. A wrong length would otherwise skip real packets for a long time.
+static bool isPacketHeader(u32 position)
+{
+    const u8 type = ringU8(position + 1);
+    const bool known = (type >= DISPLAY_PACKET_HELLO && type <= DISPLAY_PACKET_RECT_RLE)
+        || type == DISPLAY_PACKET_KEEPALIVE
+        || (type >= DISPLAY_PACKET_ANIM_BEGIN && type <= DISPLAY_PACKET_ANIM_SLEEP);
+    return ringU8(position) == DISPLAY_PACKET_MAGIC && known && ringU16(position + 2) == 0
+        && ringU32(position + 4) <= DISPLAY_RING_SIZE;
+}
+
 // Consumes as much of the ring as possible. Partial data waits for the next call.
 static void drainRing()
 {
@@ -566,7 +594,7 @@ static void drainRing()
                     publishTail();
                     return;
                 }
-                if (ringU8(sTail) != DISPLAY_PACKET_MAGIC)
+                if (!isPacketHeader(sTail))
                 {
                     sTail += 4;     // Packets are word aligned: look for the next one
                     break;
@@ -578,6 +606,7 @@ static void drainRing()
                 sPacketEnd = sTail + ((sPayloadLength + 3) & ~3u);
                 SHARED_DISPLAY->packetCount = SHARED_DISPLAY->packetCount + 1;
                 sLastPacketVBlank = sVBlankCount;
+                sHaveSession = true;
 
                 if (sPacketType == DISPLAY_PACKET_RECT_RAW)
                     sParseState = ParseState::RectHeader;
@@ -687,7 +716,6 @@ static void drainRing()
 // VBlank & connection feedback
 //--------------------------------------------------------------------
 
-static bool  gConnected    = false;
 static u32   gFrameCounter = 0;
 
 static void vblankIrq(u32)
@@ -805,55 +833,44 @@ int main(int argc, char* argv[])
 
         if (generation != SHARED_DISPLAY->ringGeneration)
         {
-            // The host went away: anything before this head belongs to it.
+            // The host closed the port: anything before this head belongs to the old session.
+            // The picture and animations stay until the next HELLO.
             generation = SHARED_DISPLAY->ringGeneration;
             sTail = SHARED_DISPLAY->ringHead;
             sParseState = ParseState::Header;
             publishTail();
-            resetAnimations();
+            sLastPacketVBlank = sVBlankCount - DISPLAY_HOST_TIMEOUT_VBLANKS - 1;    // Silent from now
         }
 
         drainRing();
+
+        // Packets are what show the host is there. The port's open flag can be lost in a bus
+        // reset while the host keeps sending, and stays set while a sleeping PC sends nothing.
+        HostMode mode = HostMode::Boot;
+        if (sHaveSession)
+        {
+            if (sVBlankCount - sLastPacketVBlank <= DISPLAY_HOST_TIMEOUT_VBLANKS)
+                mode = HostMode::Live;
+            else
+                mode = SHARED_DISPLAY->usbConnected ? HostMode::Asleep : HostMode::Closed;
+        }
+        if (mode != sHostMode)
+        {
+            sHostMode = mode;
+            if (mode == HostMode::Live)
+                showLivePicture();
+            else
+                showDarkScreen(mode == HostMode::Asleep);
+        }
+        if (mode == HostMode::Boot)
+            drawBootDiagnostics();
+
         updateAnimations();
 
         if (mem_swapByte(false, &sPendingCapture))
             debug_capture((const void*)VRAM_A_BASE, (const void*)VRAM_C_SUB_BG_BASE);
 
-        // Connection housekeeping.
         gFrameCounter++;
-        bool connected = SHARED_DISPLAY->usbConnected != 0;
-        if (!gConnected && connected)
-        {
-            // Just connected: clear screens and restore the last brightness
-            // the host configured (100 until the host sets one).
-            clearScreens();
-            applyBrightness(sScreenOn ? sBrightness : 0);
-            sLastPacketVBlank = sVBlankCount;
-            sHostAsleep = false;
-        }
-        else if (gConnected && !connected)
-        {
-            // Just disconnected (or app closed COM port): black out both screens
-            // and dim backlights to minimum.
-            // Use 0x8000 (opaque black) — bit15=0 is transparent in sub BG mode.
-            clearScreens();
-            applyBrightness(0);
-        }
-        gConnected = connected;
-        if (!gConnected)
-            drawBootDiagnostics();
-
-        // A quiet host, such as a sleeping PC, keeps the port open but sends nothing. Fading
-        // to black keeps the picture, so it comes straight back when packets do.
-        const bool asleep = gConnected && sVBlankCount - sLastPacketVBlank > DISPLAY_HOST_TIMEOUT_VBLANKS;
-        if (asleep != sHostAsleep)
-        {
-            sHostAsleep = asleep;
-            if (asleep)
-                showSleepScreen();
-            else if (gConnected)
-                showLivePicture();
-        }
     }
 
     return 0;

@@ -38,26 +38,40 @@ Pixels are ABGR1555, little-endian. Bit 15 must be set for a pixel to be visible
 Measured figures are in [docs/PLAN.md](../docs/PLAN.md). Run `tools/ds_bench.py` to
 measure, and `tools/test_ds_hw.py` to check drawing pixel for pixel.
 
-## Reconnecting
+## Sessions and what's on screen
 
-The ARM7 watches DTR (`tud_cdc_connected`). When the host closes the port or the cable
-is pulled, it discards the session's data, so the next session starts on a packet
-boundary. The screens black out until the host reconnects, and brightness is restored.
+A session starts with HELLO, which makes the DS black with no animations. Nothing else resets
+them, so the PC app and the DS always agree on what's showing. Packets are what tell the DS the
+host is there:
 
-The PC app finds the port again, repeats the HELLO handshake, and sends the whole screen and its
-animations.
+| State | When | On screen |
+|---|---|---|
+| Boot | No packet since power on | Startup diagnostics |
+| Live | A packet in the last 5 seconds | The host's picture and animations |
+| Asleep | Port open, but silent for 5 seconds | Sleep screen |
+| Closed | The host closed the port | Black |
+
+- **Asleep** covers a sleeping PC, a frozen app and a pulled cable. The DSpico can't detect an
+  unplugged cable: it reports one as a bus suspend, the same as a sleeping PC. Bus suspend alone
+  never ends a session.
+- **Live** doesn't need the port's open flag (DTR). A bus reset when a PC wakes can clear the
+  flag while the app's port stays open and keeps sending.
+- The host sends a packet at least every second, a KEEPALIVE if nothing else.
+- When packets return, the live picture comes back from the DS's own copy, and its animations
+  start over.
+- When the port closes, the ARM7 discards what's left of that session's data, so the next one
+  starts on a packet boundary.
+
+The PC app starts a new session whenever its link fails, and after any pause longer than
+5 seconds, such as the PC sleeping.
 
 ## Animations
 
 GIFs are uploaded once and play on the DS with no USB traffic. The DS keeps its own copy of the
 live picture, and transparent animation pixels show it, so live values stay visible under a GIF.
 
-## Sleep screen
-
-The host sends a packet at least every second. After 5 seconds with none, such as while the PC
-sleeps, the DS blacks out the screens, pauses the host's animations, and plays the sleep animation
-in its own slot at a low brightness. The next packet brings back the live picture from the DS's
-copy, so the host doesn't need to resend it.
+The sleep screen is a black background with the sleep animation, from its own slot, at its own
+brightness. The host's animations pause while it shows.
 
 ## Limitations
 

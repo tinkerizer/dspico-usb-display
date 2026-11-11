@@ -42,8 +42,8 @@ classic/
 
 ### Sleep screen
 
-When the app stops sending, as when the PC sleeps, the DS waits 5 seconds and then shows the sleep
-screen: black, with the theme's sleep GIF playing at its own brightness. It's set in the **DS
+When the app stops sending, as when the PC sleeps or the cable is pulled, the DS waits 5 seconds and
+then shows the sleep screen: black, with the theme's sleep GIF playing at its own brightness. It's set in the **DS
 theme** menu, under **When the PC sleeps**, and saved as you change it.
 
 - `file`: a GIF in the theme's folder, or `""` for just black. The GIF is cropped to what's drawn

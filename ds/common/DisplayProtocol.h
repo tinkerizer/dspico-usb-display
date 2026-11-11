@@ -25,7 +25,8 @@ static_assert(sizeof(DisplayPacketHeader) == 8);
 
 enum DisplayPacketType : u8
 {
-    DISPLAY_PACKET_HELLO      = 1,  // No payload; the DS replies "ds_256x384.v2\n"
+    DISPLAY_PACKET_HELLO      = 1,  // No payload. Starts a session: the DS goes black, drops its
+                                    // animations, and replies "ds_256x384.v2\n"
     DISPLAY_PACKET_CLEAR      = 2,  // No payload
     DISPLAY_PACKET_BRIGHTNESS = 3,  // u32 level, 0-100
     DISPLAY_PACKET_POWER      = 4,  // u32 on
@@ -56,8 +57,10 @@ enum DisplayPacketType : u8
 // When the host goes quiet, the screens go black, other animations pause, and it plays at
 // that brightness. A slot past the end means just black. ANIM_RESET clears it.
 
-// The host sends a packet at least every second, a KEEPALIVE if nothing else. After this
-// long with none, such as while the PC sleeps, the DS shows the sleep screen until the next packet.
+// The host sends a packet at least every second, a KEEPALIVE if nothing else. Packets are what
+// show the host is there. After this long with none and the port still open, as with a sleeping
+// PC or a pulled cable, the DS shows the sleep screen until the next packet. If the host closed
+// the port, the DS is black instead. Only HELLO resets the picture and animations.
 #define DISPLAY_HOST_TIMEOUT_VBLANKS  (5 * 60)
 
 // RECT_RLE tokens are u16s covering the rect row by row:

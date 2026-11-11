@@ -205,17 +205,20 @@ int main()
             if (mask & MCU_IRQ_POWER_OFF){ pmic_shutdown(); }
         }
 
-        // tud_cdc_connected() checks DTR: true only when the host has the port
-        // open, so the screens go dark when the app closes it, not just on unplug.
-        bool connected = tud_cdc_connected();
+        // Open means the host has the port open (DTR). Bus suspend doesn't count as closing
+        // it: a sleeping PC suspends the bus with the app's port still open, and the DSpico
+        // reports an unplugged cable as a suspend too. The ARM9 notices those by the silence.
+        bool connected = tud_mounted() && (tud_cdc_get_line_state() & 1);
         SHARED_DISPLAY->usbConnected = connected ? 1 : 0;
 
         if (wasConnected && !connected)
         {
             // Discard everything from the old session, so the next one starts
-            // on a packet boundary even if this one died mid-packet.
+            // on a packet boundary even if this one died mid-packet. Packets are
+            // word aligned in the ring, so the next one must start on a word too.
             tud_cdc_read_flush();
             tud_cdc_write_clear();
+            SHARED_DISPLAY->ringHead = (SHARED_DISPLAY->ringHead + 3) & ~3u;
             SHARED_DISPLAY->ringGeneration = SHARED_DISPLAY->ringGeneration + 1;
         }
         wasConnected = connected;

@@ -217,6 +217,15 @@ class DeviceTests(unittest.TestCase):
         self.assertEqual(packets, [device.PACKET_ANIM_BEGIN, device.PACKET_ANIM_FRAME, device.PACKET_ANIM_PLAY,
                                    device.PACKET_ANIM_BEGIN, device.PACKET_ANIM_FRAME, device.PACKET_ANIM_SLEEP])
 
+    def test_a_long_pause_starts_a_new_session(self):
+        # Waking from sleep: the port may still work, but the DS can have reset or missed data.
+        ds = device.DsDevice()
+        port = FakePort()
+        with mock.patch.object(device, "PAUSE_SECONDS", -1):
+            with self.assertRaises(device.Paused):
+                ds._session(port, "COM3")
+        self.assertEqual(packets_in(port.written[0]), [device.PACKET_HELLO])
+
     def test_a_quiet_session_still_sends_keepalives(self):
         # The DS goes dark when nothing arrives for a while, as when the PC sleeps.
         ds = device.DsDevice()
