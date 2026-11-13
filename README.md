@@ -1,8 +1,8 @@
 # dspico-usb-display
 
 Turns a DS Lite or DSi with a DSpico flashcart into a USB stats display for the PC: CPU, RAM, GPU,
-temperature, disk and network, a clock and calendar, and your own images and GIFs. The roadmap is
-in [docs/PLAN.md](docs/PLAN.md).
+temperature, disk and network, a clock and calendar, and your own images and GIFs. What it does
+and what's planned is in [docs/PLAN.md](docs/PLAN.md).
 
 ![The editor with a DS Lite](docs/images/editor-lite.png)
 

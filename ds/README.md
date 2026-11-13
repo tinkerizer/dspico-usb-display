@@ -35,7 +35,7 @@ Pixels are ABGR1555, little-endian. Bit 15 must be set for a pixel to be visible
 
 ## Performance
 
-Measured figures are in [docs/PLAN.md](../docs/PLAN.md). Run `tools/ds_bench.py` to
+Measured figures are in [docs/DESIGN.md](../docs/DESIGN.md). Run `tools/ds_bench.py` to
 measure, and `tools/test_ds_hw.py` to check drawing pixel for pixel.
 
 ## Sessions and what's on screen

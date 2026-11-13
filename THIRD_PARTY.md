@@ -15,5 +15,10 @@ or links the following, each under its own licence, all compatible with the GPL.
 | [motion](https://motion.dev), [floating-ui](https://floating-ui.com) | `app/dsdash/web/vendor` | MIT |
 | [pixelarticons](https://pixelarticons.com) | the undo, redo and reset tool icons | MIT |
 
+## Thanks
+
+The menu art in the built-in themes is the classic DS menu art from
+[TWiLight Menu++](https://github.com/DS-Homebrew/TWiLightMenu). Thank you to everyone who works on it.
+
 The Windows installer also bundles Python packages: Pillow (MIT-CMU), numpy, pyserial and psutil
 (BSD), pystray (LGPL 3), and PyInstaller's bootloader (GPL 2 with an exception for bundled apps).
