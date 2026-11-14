@@ -29,12 +29,14 @@ outline, corner radius, hinge and lower bezel. For a new shell, add a preset. Pa
 | Part | What it is |
 |---|---|
 | `lid` | The lid's outline. Bottom corners nearly square, stepping down to meet the middle hinge part |
-| `lid-edge` | Bands on the lid's sides and top: casing seam, bright rim, then the curved-edge fade |
-| `base-edge` | Bands on the lower half's sides and bottom: the casing seam |
+| `lid-edge` | Gradients along the lid's sides and top and round its corners: casing seam, bright rim, then the curved-edge fade |
+| `base-edge` | Gradients down the lower half's sides, along its bottom and round its corners: the casing seam |
 | `plate` | The raised plate the lower screen sits in |
 | `slope` | Shading round the plate |
 
-Both shells are generated from their presets, so regenerating reproduces them exactly.
+Each part prints its gradients, for `<defs>`, then the shapes that use them. Both shells' edges come
+from their presets. SVG has no gradient that follows a rounded rectangle, so each edge is straight
+runs with linear gradients and corners with radial ones, centred on the corner's arc.
 
 ## Measuring tools
 
@@ -116,10 +118,11 @@ accurate. A stock render had wider bezels (16 against 12).
 
 ## Things to keep
 
-- **Colours:** use `color-mix(in srgb, var(--base), …)` or black and white at an opacity, never a
-  fixed colour, so every shell colour works. Test with a dark and a light colour.
-- **No blur filters on large shapes:** build soft shading from nested outlines or stacked
-  translucent shapes, as `parts.py` does. Blur filters are slow when Chrome renders without a GPU.
+- **Colours:** only the `.plastic` class takes the shell's colour. Every other shade is black or
+  white at an opacity, drawn over plastic, never a fixed grey and never `color-mix()`. The shell
+  then recolours as a whole, and renders the same in browsers, editors and librsvg.
+- **No blur filters on large shapes:** build soft shading from gradients, not from stacks of
+  outlines and not from blur, which is costly when Chrome renders in software.
 - **Fixed parts:** the screens (`.glass`) and the hinge must stay where they are, as the live preview
   is laid over them. Their positions are in `SHELLS` in `app.js`.
 - **Lettering:** text is outlines in Varela Round (SIL Open Font License).

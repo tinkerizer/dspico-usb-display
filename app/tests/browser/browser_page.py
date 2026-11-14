@@ -163,8 +163,8 @@ class ShellButtonTests(BrowserCase):
 
     def test_dpad_rocks_towards_the_arm(self):
         page = self.shell("lite")
-        page.locator(".dpad").scroll_into_view_if_needed()
-        x, y, box = self.centre(page, ".dpad")
+        page.locator(".plastic.dpad").scroll_into_view_if_needed()
+        x, y, box = self.centre(page, ".plastic.dpad")
         for dx, dy, expected in ((0, -.4, ("0px", "-1.2px")), (.4, 0, ("1.2px", "0px"))):
             page.mouse.move(x + box["width"] * dx, y + box["height"] * dy)
             page.mouse.down()
