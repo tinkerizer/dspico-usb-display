@@ -13,8 +13,11 @@ import sys
 PRESETS = {
     # Outline left/right, corner radius, where the lid stops above the hinge ends, the hinge's top
     # and bottom, the middle hinge part (between its seams), the base's bottom, and the lower bezel.
-    "lite": dict(x0=0, x1=552, radius=19, lid_bottom=266.5, hinge_top=268.5, hinge_bottom=305.5,
-                 middle=(68.9, 483.1), base_bottom=575, bezel=(135.8, 322.1, 280.4, 217.1, 4.5), plate_top=310.5),
+    # Measured from a front-on drawing of a black DS Lite, scaled by its screens. The plate runs up under
+    # the hinge, so its top edge never shows.
+    "lite": dict(x0=0, x1=552, radius=17, lid_bottom=264.5, hinge_top=270.5, hinge_bottom=307.5,
+                 middle=(68.9, 483.1), base_bottom=575, bezel=(131.2, 318.2, 289.6, 225.6, 4.5), plate_top=296,
+                 plate_edge=3.7),
     # Measured from a front-on render of a white DSi. Its lid runs straight along the hinge, with a dark
     # crease above the end pieces, and its plate has a wider edge.
     "dsi": dict(x0=0, x1=531, radius=17.7, lid_bottom=252.5, hinge_top=253.5, hinge_bottom=290,
