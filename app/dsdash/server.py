@@ -172,6 +172,9 @@ def make_handler(app: App, port: int):
                 if url.path == "/api/brightness":
                     app.set_brightness(int(json.loads(body)["level"]))
                     self._json(app.status())
+                elif url.path == "/api/firmware":
+                    app.firmware.answer(json.loads(body)["update"] is True)
+                    self._json(app.status())
                 elif url.path == "/api/layout":
                     saved, revision = app.set_layout(json.loads(body), self._sent_revision())
                     self._json(saved, revision=revision)

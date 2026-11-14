@@ -18,7 +18,7 @@ import numpy as np
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from dsdash import codec, device, elements, firmware, gpu, installer, layout, templates, themes, widgets
+from dsdash import codec, device, elements, firmware, gpu, installer, layout, templates, themes, updates, widgets
 from dsdash.sensors import Stats
 
 
@@ -852,6 +852,14 @@ class RevisionTests(unittest.TestCase):
         self.assertEqual(listing["active"], "Classic 2")
         self.assertEqual(self.fetch("/api/theme.png?name=Nope")[0].status, 404)
 
+    def test_the_firmware_update_waits_for_an_answer(self):
+        self.app.firmware.offer = {"running": 17}
+        self.assertEqual(self.call("GET", "/api/status")[1]["firmwareOffer"], {"running": 17})
+        status, body, _ = self.call("POST", "/api/firmware", json.dumps({"update": True}))
+        self.assertEqual((status, body["firmwareOffer"]), (200, None))
+        self.assertTrue(self.app.firmware._allowed)
+        self.assertIsNone(self.call("GET", "/api/status")[1]["update"])
+
     def test_the_sleep_screen_says_where_its_gif_goes(self):
         listing = self.call("GET", "/api/themes")[1]
         box = listing["sleepBox"]
@@ -926,6 +934,26 @@ class FirmwareTests(unittest.TestCase):
         patcher = mock.patch.object(firmware, "SD_RECORD", Path(folder.name) / "firmware.json")
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.keeper.answer(True)    # Most tests are about what happens once the update is agreed to
+
+    def test_asks_before_updating(self):
+        keeper = firmware.FirmwareKeeper()
+        keeper.check(self.link(0x9999), b"rom")
+        self.push.assert_not_called()
+        self.assertEqual(keeper.offer, {"running": 7})
+        keeper.answer(True)
+        self.assertIsNone(keeper.offer)
+        keeper.check(self.link(0x9999), b"rom")
+        self.push.assert_called_once()
+
+    def test_a_no_lasts_for_the_run(self):
+        keeper = firmware.FirmwareKeeper()
+        keeper.check(self.link(0x9999), b"rom")
+        keeper.answer(False)
+        keeper.check(self.link(0x9999), b"rom")
+        self.push.assert_not_called()
+        self.assertIsNone(keeper.offer)
+        self.assertIn("skipped", keeper.state)
 
     def link(self, crc):
         return SimpleNamespace(request=lambda op: struct.pack("<7I", 3, crc, 0, 0, 0, 0, 7))
@@ -979,6 +1007,26 @@ class FirmwareTests(unittest.TestCase):
         self.keeper.check(self.link(0x1234), b"rom")
         self.keeper.check(self.link(0), b"rom")
         self.assertEqual(self.push.call_count, 2)
+
+
+class UpdateTests(unittest.TestCase):
+    URL = "https://github.com/tinkerizer/dspico-usb-display/releases/tag/v1.4.0"
+
+    def test_a_newer_release_is_offered_with_its_page(self):
+        found = updates.newer({"tag_name": "v1.4.0", "html_url": self.URL}, "1.3.0")
+        self.assertEqual(found, {"version": "1.4.0", "url": self.URL})
+        self.assertEqual(updates.newer({"tag_name": "v1.10.0", "html_url": self.URL}, "1.9.9")["version"], "1.10.0")
+
+    def test_the_same_or_an_older_release_is_not(self):
+        for tag in ("v1.3.0", "v1.2.9", "1.3.0"):
+            self.assertIsNone(updates.newer({"tag_name": tag, "html_url": self.URL}, "1.3.0"), tag)
+
+    def test_anything_unexpected_is_ignored(self):
+        for release in ({}, {"tag_name": "nightly", "html_url": self.URL}, {"tag_name": "v9.0.0"},
+                        {"tag_name": "v9.0.0", "html_url": "https://example.com/setup.exe"},
+                        {"tag_name": "v9.0.0", "html_url": "javascript:alert(1)"}, {"tag_name": 9, "html_url": self.URL}):
+            self.assertIsNone(updates.newer(release, "1.3.0"), release)
+        self.assertIsNone(updates.newer({"tag_name": "v9.0.0", "html_url": self.URL}, "unknown"))
 
 
 class InstallerTests(unittest.TestCase):

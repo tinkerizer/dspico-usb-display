@@ -3,6 +3,18 @@
 Each release's version is in [VERSION](VERSION). `tools/release --publish` uses the section for that
 version as the release notes.
 
+## 1.3.1
+
+- **DS updates ask first:** when the app comes with a newer DS app, the editor asks before sending
+  it. A no lasts until the PC app is restarted.
+- **New versions:** the installed app looks on GitHub once a day for a newer release, and the
+  editor shows a link to it. Nothing is downloaded or installed by itself.
+- **Shells:** both are drawn with gradients over one plastic colour. The DS Lite is re-measured:
+  a larger lower screen surround that runs up to the hinge, larger corner pads, a softer shadow
+  under the hinge, and evenly lit buttons. The DSi's screen border matches the DS Lite's.
+- **Steadier page:** the tiles under the DS and the page's grid stay put when the shell changes,
+  and Layers and JSON are the same width, so switching between them no longer moves the screens.
+
 ## 1.3.0
 
 - **Sleep on more PCs:** the sleep screen now shows when the PC suspends its USB ports, which used

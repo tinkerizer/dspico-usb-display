@@ -283,6 +283,30 @@ class SettingsTests(BrowserCase):
         page.wait_for_function("async before => (await api('/api/themes')).themes.Classic.lift === before", arg=before["lift"])
         self.assertTrue(page.is_disabled("#dsThemeUndo"))
 
+    def test_a_ds_update_is_asked_about_first(self):
+        page = self.open()
+        self.addCleanup(setattr, harness.app.firmware, "offer", None)
+        harness.app.firmware.offer = {"running": 17}
+        page.wait_for_selector("#modal:not([hidden])")
+        self.assertIn("build 17", page.text_content("#modalText"))
+        page.click("#modalYes")
+        page.wait_for_function("document.getElementById('modal').hidden")
+        for _ in range(100):
+            if harness.app.firmware._allowed:
+                break
+            page.wait_for_timeout(20)
+        self.assertTrue(harness.app.firmware._allowed)
+        self.assertIsNone(harness.app.firmware.offer)
+
+    def test_a_newer_release_shows_as_a_link(self):
+        page = self.open()
+        self.assertFalse(page.is_visible("#updateChip"))
+        self.addCleanup(setattr, harness.app.updates, "found", None)
+        harness.app.updates.found = {"version": "9.0.0", "url": "https://github.com/tinkerizer/dspico-usb-display/releases/tag/v9.0.0"}
+        page.wait_for_selector("#updateChip:not([hidden])")
+        self.assertEqual(page.text_content("#updateChip"), "v9.0.0 is out")
+        self.assertIn("/releases/tag/v9.0.0", page.get_attribute("#updateChip", "href"))
+
     def test_folded_settings_stay_folded(self):
         page = self.open()
         page.click(".group[data-group=sleep] > summary")

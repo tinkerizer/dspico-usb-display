@@ -180,8 +180,12 @@ class ShelfTests(BrowserCase):
 
     def test_grid_runs_through_the_tile_cells(self):
         page = self.open(width=1920, height=1060)
-        for editing, fill, scroll in ((True, False, 0), (True, False, 100000), (True, True, 0), (False, False, 0)):
+        self.addCleanup(page.evaluate, "setShellModel('lite')")
+        places = set()
+        for editing, fill, scroll, shell in ((True, False, 0, "lite"), (True, False, 100000, "lite"), (True, True, 0, "lite"),
+                                             (False, False, 0, "lite"), (False, False, 0, "dsi")):
             page.evaluate("([editing, fill]) => { setEditing(editing); setFill(fill); }", [editing, fill])
+            page.evaluate("shell => setShellModel(shell)", shell)
             page.evaluate("y => window.scrollTo(0, y)", scroll)
             page.evaluate(NEXT_PAINT)
             tiles, grid = page.evaluate("""() => {
@@ -192,6 +196,9 @@ class ShelfTests(BrowserCase):
             for left, top in tiles:
                 self.assertEqual((left - grid[0]) % 48, 2)
                 self.assertEqual((top - grid[1]) % 48, 2)
+            if not editing:
+                places.add((tuple(tiles[0]), tuple(grid)))
+        self.assertEqual(len(places), 1, "The tiles and the grid moved when the shell changed")
 
     def test_the_preview_shows_the_whole_shell_centred(self):
         page = self.open(width=1920, height=1060)
@@ -213,6 +220,10 @@ class ShelfTests(BrowserCase):
                          (1920, r["bar"]["bottom"], 1060))
         self.assertLess(r["console"]["right"], drawer["x"])
         self.assertAlmostEqual(r["console"]["left"] - 16, drawer["x"] - 16 - r["console"]["right"], delta=1)
+        page.click("#jsonTab")
+        page.evaluate(NEXT_PAINT)
+        self.assertEqual(page.evaluate(RECTS)["console"], r["console"], "Switching to JSON moved the screens")
+        page.click("#layersTab")
         page.click("#toggleLayers")
 
     def test_clicking_a_screen_opens_the_editor_and_done_closes_it(self):

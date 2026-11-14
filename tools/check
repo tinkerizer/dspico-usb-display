@@ -23,6 +23,7 @@ while read -r file; do
         app/dsdash/widgets.py)  tests+=(DashboardTests UsbIconTests CalendarTests TemperatureTests) ;;
         app/dsdash/server.py)   tests+=(ServerTests ConnectionTests RevisionTests); browser=yes ;;
         app/dsdash/firmware.py) tests+=(FirmwareTests) ;;
+        app/dsdash/updates.py)  tests+=(UpdateTests) ;;
         app/dsdash/themes.py)   tests+=(ThemeTests) ;;
         app/dsdash/gpu.py)      tests+=(GpuTests) ;;
         app/dsdash/installer.py) tests+=(InstallerTests) ;;

@@ -1006,7 +1006,6 @@ function showDrawer(tab) {
   if (closing) { requestAnimationFrame(placeInspector); return; }
 
   const json = tab === "json";
-  drawer.classList.toggle("wide", json);
   $("layersPane").hidden = json;
   $("jsonPanel").hidden = !json;
   $("layersTab").setAttribute("aria-selected", String(!json));
@@ -1337,16 +1336,21 @@ function fitPreview() {
   const scale = fill ? fit : Math.max(least, Math.floor(fit * ratio)) / ratio;
   shell.style.width = `${SHELL_W * scale}px`;
 
-  // Centred in the room below the top bar, with the tools under it, on whole device pixels.
-  const height = SHELL_H * scale + tools;
-  const pad = Math.max(MARGIN, (window.innerHeight - bar - height) / 2);
+  // Centred in the room below the top bar, with the tools under it, on whole device pixels. The
+  // preview keeps room for the tallest shell, so the tools and the page's grid stay where they
+  // are whichever shell is shown, and a shorter shell sits in the middle of that room.
+  const onPixel = value => Math.round(value * ratio) / ratio;
+  const box = (editing ? SHELL_H : needH) * scale;
+  const pad = onPixel(Math.max(MARGIN, (window.innerHeight - bar - box - tools) / 2));
+  const spare = box - SHELL_H * scale;
   stage.style.paddingTop = `${pad}px`;
+  shell.style.margin = `${spare / 2}px 0`;
   shell.style.transform = "";
   const { left, top } = shell.getBoundingClientRect();
-  const snap = value => Math.round(value * ratio) / ratio - value;
-  // A fractional translate can paint a row off, so the top moves by its padding.
-  stage.style.paddingTop = `${pad + snap(top)}px`;
-  shell.style.transform = `translateX(${snap(left)}px)`;
+  // A fractional translate can paint a row off, so the top moves by its margin.
+  const nudge = onPixel(top) - top;
+  shell.style.margin = `${spare / 2 + nudge}px 0 ${spare / 2 - nudge}px`;
+  shell.style.transform = `translateX(${onPixel(left) - left}px)`;
 
   // The page's grid is anchored to the tools, which sit 2px in from their grid lines.
   const firstTool = under.querySelector(".tile").getBoundingClientRect();
@@ -1417,6 +1421,7 @@ async function applyShell() {
   if (editing) return;
   const response = await fetch(shell.file);
   if (!editing && shell === SHELLS[shellModel]) $("shellArt").innerHTML = await response.text();
+  fitPreview();
 }
 
 $("shellModel").addEventListener("click", () => { play("select"); setShellModel(shellModel === "lite" ? "dsi" : "lite"); });
@@ -1800,6 +1805,20 @@ async function refreshFrame() {
   }
 }
 
+// A newer DS app is only sent once the user agrees. A no lasts until the PC app restarts.
+let firmwareAsked = false;
+
+async function offerFirmware(offer) {
+  if (!offer) { firmwareAsked = false; return; }
+  if (firmwareAsked || !$("modal").hidden) return;
+  firmwareAsked = true;
+  const update = await confirmDialog(`This version comes with a newer DS app. The DS is running build ${offer.running}. Update it now? It restarts the DS app, which takes a few seconds.`);
+  try {
+    await api("/api/firmware", { method: "POST", body: JSON.stringify({ update }) });
+    toast(update ? "Updating the DS…" : "The DS stays as it is until the app restarts");
+  } catch (error) { toast(error.message, true); }
+}
+
 function showStatus(s) {
   $("dot").classList.toggle("on", s.connected);
   $("link").textContent = s.connected ? `Connected on ${s.port}` : "Waiting for the DS…";
@@ -1816,6 +1835,13 @@ function showStatus(s) {
     brightnessReady = true;
     showDim();
   }
+  $("updateChip").hidden = !s.update;
+  if (s.update) {
+    $("updateChip").textContent = `v${s.update.version} is out`;
+    $("updateChip").href = s.update.url;
+    $("updateChip").title = "Open its download page";
+  }
+  offerFirmware(s.firmwareOffer);
   // Only when the picture changed: most seconds it hasn't.
   if (shownFrame === null || String(s.frame) !== shownFrame) refreshFrame();
   if (s.layoutRevision > revision && !saveTimer && !saveAgain && !writing) pullLayout();

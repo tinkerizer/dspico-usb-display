@@ -14,6 +14,7 @@ from . import codec, layout as layouts, themes, widgets
 from .device import Animation, DsDevice
 from .firmware import FirmwareKeeper
 from .sensors import Sensors
+from .updates import UpdateChecker
 from .version import VERSION
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class App:
     def __init__(self):
         self.device = DsDevice()
         self.firmware = FirmwareKeeper()
+        self.updates = UpdateChecker()
         self.themes = themes.ThemeStore()
         self.sensors = Sensors()
         self.layout = self.themes.layout
@@ -50,6 +52,8 @@ class App:
     def start(self):
         self.device.start()
         self.firmware.start()
+        if layouts.FROZEN:      # Only the installed app looks for newer releases
+            self.updates.start()
         self._load_animations()
         threading.Thread(target=self._tick_loop, name="ds-render", daemon=True).start()
 
@@ -60,6 +64,7 @@ class App:
             self._ticked.notify_all()
         self.device.stop()
         self.firmware.stop()
+        self.updates.stop()
 
     def set_layout(self, new_layout: dict, revision: Optional[int] = None) -> Tuple[dict, int]:
         """Saves unless revision is given and out of date. Returns the layout and its revision."""
@@ -219,6 +224,8 @@ class App:
             "updatesSent": device.updates_sent,
             "lastError": device.last_error,
             "firmware": self.firmware.state,
+            "firmwareOffer": self.firmware.offer,
+            "update": self.updates.found,
             "brightness": self.brightness,
             "layoutRevision": self.revision,
             "frame": self._frame_id,

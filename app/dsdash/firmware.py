@@ -1,4 +1,4 @@
-"""Dev feature: keeps the DS on the bundled build.
+"""Keeps the DS on the bundled build, once the user has agreed to the update.
 
 A push is quick but only lives in RAM, so a build that's new to the SD card is then also
 copied there, once, to survive a power cycle. That takes the DS off USB for a few seconds.
@@ -60,12 +60,21 @@ class FirmwareKeeper(threading.Thread):
     def __init__(self):
         super().__init__(name="ds-firmware", daemon=True)
         self.state = "Waiting for the DS"
+        self.offer = None           # {"running": build} while an update waits for a yes or no
+        self._allowed = None        # The answer, for this run
         self._stop_event = threading.Event()
+        self._wake = threading.Event()
         self._next_push = 0.0
         self._failed_install = None
 
     def stop(self):
         self._stop_event.set()
+        self._wake.set()
+
+    def answer(self, update: bool):
+        """The user's yes or no to the update on offer. A no lasts until the app is restarted."""
+        self._allowed, self.offer = bool(update), None
+        self._wake.set()
 
     def _report(self, state: str):
         if state != self.state:
@@ -85,9 +94,15 @@ class FirmwareKeeper(threading.Thread):
         # After a power cycle the boot CRC means nothing, but the build number still does.
         if crc == wanted or (on_sd and build == record.get("build")):
             self._next_push = 0.0
+            self.offer = None
             self._report(f"Current: build {build}")
             return None if on_sd or self._failed_install == wanted else build
-        if time.monotonic() < self._next_push:
+        if self._allowed is None:
+            self.offer = {"running": build}
+            self._report(f"Update ready: the DS is on build {build}")
+        elif not self._allowed:
+            self._report(f"Out of date: build {build}, update skipped")
+        elif time.monotonic() < self._next_push:
             self._report(f"Out of date: build {build}, will retry")
         else:
             self._next_push = time.monotonic() + RETRY_SECONDS
@@ -124,4 +139,5 @@ class FirmwareKeeper(threading.Thread):
                     self.install(rom, path.name, build)
             except Exception as error:   # No DS, dev tools using the port, or a bad reply
                 self._report(f"Not checked: {error}")
-            self._stop_event.wait(CHECK_SECONDS)
+            self._wake.wait(CHECK_SECONDS)
+            self._wake.clear()
